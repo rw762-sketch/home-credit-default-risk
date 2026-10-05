@@ -135,8 +135,6 @@ The next modeling experiment is one applicant-linked historical feature family, 
 ## References
 
 - [William Koehrsen: Start Here - A Gentle Introduction](https://www.kaggle.com/code/willkoehrsen/start-here-a-gentle-introduction): exploratory analysis, anomalies, and baseline comparisons.
-- [Nikita Ageev: PSI, Drift and Re-setting the Cutoff](https://www.kaggle.com/code/truenikita/home-credit-psi-drift-and-re-setting-the-cutoff): questions about distribution drift, calibration, and cutoff behavior.
-- [Home Aloan: 1st Place Solution](https://www.kaggle.com/competitions/home-credit-default-risk/writeups/home-aloan-1st-place-solution): technical presentation and future historical-feature experiments.
-- [scikit-learn: common pitfalls](https://scikit-learn.org/stable/common_pitfalls.html): fold-fitted preprocessing and leakage prevention.
+
 
 Saved results are from October 4, 2026. External sources are methodological references; their reported performance is not a controlled comparison with this project.
