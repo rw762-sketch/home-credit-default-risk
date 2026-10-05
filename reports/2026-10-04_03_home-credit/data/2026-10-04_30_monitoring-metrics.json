@@ -1,0 +1,34 @@
+{
+  "threshold": 0.08439984645088247,
+  "threshold_objective": "maximize development OOF F2 (beta=2)",
+  "tie_break": "highest threshold among equal F2 values",
+  "calibration": {
+    "development OOF": {
+      "brier": 0.06782132394205989,
+      "log_loss": 0.24586143493901463,
+      "mean_probability": 0.08062084051046045,
+      "observed_rate": 0.08072908198107379,
+      "weighted_absolute_gap": 0.0036338856514760527
+    },
+    "previously inspected holdout": {
+      "brier": 0.0673288590112364,
+      "log_loss": 0.24398477800035157,
+      "mean_probability": 0.08054868841539715,
+      "observed_rate": 0.08072776937710356,
+      "weighted_absolute_gap": 0.0034036753445549333
+    }
+  },
+  "holdout_status": "Previously inspected; follow-up diagnostic, not a fresh final test.",
+  "drift": {
+    "feature_reference": "development rows",
+    "score_reference": "reserved holdout rows",
+    "score_model": "same development-fitted evaluation model for holdout and test",
+    "null_simulations": 250,
+    "null_quantile": 0.95,
+    "interpretation": "Descriptive distribution comparison; feature-wise null flags are not multiplicity-corrected and do not establish performance deterioration."
+  },
+  "references": [
+    "https://www.kaggle.com/code/truenikita/home-credit-psi-drift-and-re-setting-the-cutoff",
+    "https://www.kaggle.com/code/willkoehrsen/start-here-a-gentle-introduction"
+  ]
+}

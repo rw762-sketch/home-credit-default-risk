@@ -1,0 +1,151 @@
+{
+  "generated_at": "2026-10-04T23:39:48.927056-04:00",
+  "training_rerun": false,
+  "source_directory": "outputs/2026-10-04_03_home-credit",
+  "sources": {
+    "outputs/2026-10-04_03_home-credit/2026-10-04_05_metrics.json": {
+      "bytes": 492,
+      "sha256": "573827747ce05599aa981ac7a1ef4d9e41eb3468d14e875ccc21028372f75bbd"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_06_model-comparison.csv": {
+      "bytes": 586,
+      "sha256": "042926071e611c2499898beead8a211d1c97546a9f330c66d2ed027026607a64"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_08_roc-curve.png": {
+      "bytes": 45014,
+      "sha256": "fda69216641ce6f34d4cc6d035b2e7c4d4d4e551cca52906ac89c1b5b603344c"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_09_precision-recall-curve.png": {
+      "bytes": 39648,
+      "sha256": "1aff6804d31fd13038382fca8fbec116fd22882141427e2ce4a08d8e5e6d7034"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_10_confusion-matrix.png": {
+      "bytes": 24210,
+      "sha256": "8f1e32ff7472a96b5ff2fe90ac0c372464129d5f0afa4167211767c1c99f264b"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_11_shap-summary.png": {
+      "bytes": 198542,
+      "sha256": "6ee9ed9d4d93859735e784aa519d13757c69ee30e83354f7e589e989884ff57e"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_12_feature-importance.csv": {
+      "bytes": 4449,
+      "sha256": "1bf1315a8698b2746bd226644d7dd8f7e01c65a560741008b71b081c90e25626"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_13_feature-importance.png": {
+      "bytes": 85451,
+      "sha256": "e46833f2869c1812bf57e2e0cbf4a244e605a486eb843a55be51557d172a8bee"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_14_missing-values.csv": {
+      "bytes": 3830,
+      "sha256": "5f66b7b729cb6a62a4c001497ca6f3ae634b0f03d791ec2a860f50dd07be35b5"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_15_target-distribution.png": {
+      "bytes": 28170,
+      "sha256": "b02bee02126664a85363edbbb8ae5145634750e8a55226d48810e231a8908dbe"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_16_correlation-heatmap.png": {
+      "bytes": 95434,
+      "sha256": "19de41f7099be066ba28e51974141d634b14febf740d1d042b2077ff0a546255"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_17_holdout-predictions.csv": {
+      "bytes": 1915283,
+      "sha256": "10cb37dcd9139d1f2e04e1f0da1e6f668dbd66713295801d0fa05f922b51fd82"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_18_evaluation-model.joblib": {
+      "bytes": 379034,
+      "sha256": "e6d5fbc6312ee3016563e627d21355917e7e9525d071be4c044a352e16df4f8e"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_19_submission.csv": {
+      "bytes": 1323328,
+      "sha256": "91de6e164daee7d4a521b97cdde82136889af67fcac72ee00f50f50195820169"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_20_submission-model.joblib": {
+      "bytes": 378570,
+      "sha256": "e9d77b89da96538390660b87940895edd06665b6c805012c91f99dd4fc080477"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_22_development-predictions.csv": {
+      "bytes": 22480318,
+      "sha256": "04afd8b5078974a6bea5a9579316e42c0d09c7ee0681201e03ef56aff3c58446"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_23_threshold-sweep.csv": {
+      "bytes": 19245915,
+      "sha256": "cb1221f3674b93826dc50a9449ba4c4785c06974337fcdc775e04a5c885544f0"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_24_threshold-comparison.csv": {
+      "bytes": 725,
+      "sha256": "56e4e9133074ffb803fd5ab141a73a13869aa46fbbeb3959d7063dde10846071"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_25_threshold-curve.png": {
+      "bytes": 82113,
+      "sha256": "8d0b41d81263aac69c78c822d267de6cebdf5939448a7ec5f6785de54938afc7"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_26_calibration.csv": {
+      "bytes": 2211,
+      "sha256": "299c0ec5ba14a123f06609aaf17335b374b12347fbaad77eda2fd1ddb90a262b"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_27_calibration-curve.png": {
+      "bytes": 65018,
+      "sha256": "a6d28845c5cc88338fbcc22517a7b05ce0fabdec49d7f7519671c8b6b6ce8f2f"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_28_drift.csv": {
+      "bytes": 14547,
+      "sha256": "7d34c07eaa889cf13b751e9499cc203b3922b34470bc35aefa095b97101883db"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_29_drift-chart.png": {
+      "bytes": 80470,
+      "sha256": "eac857624a0a1cd0fccea6ae066c823803d16ffed996deb47fcddb3fece53e5e"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_30_monitoring-metrics.json": {
+      "bytes": 1402,
+      "sha256": "bea6ab765bfe06293929c9400590dc7687f7575f6e07c9f4ea76c6174e6406cb"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_31_data-quality.csv": {
+      "bytes": 13492,
+      "sha256": "7c74cde3bf88cdbbcfed371d976b564c3b86af552ec215791f37b759be40b881"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_32_age-risk.csv": {
+      "bytes": 159,
+      "sha256": "90f408dab0d6301e8ca93b7ba0281cb6158fb0d3c8c61969e75b3bcf1b86e2e2"
+    },
+    "outputs/2026-10-04_03_home-credit/2026-10-04_33_age-risk.png": {
+      "bytes": 42354,
+      "sha256": "f77f190a168f996dcc472e350ae2f4f7c168dec8983be1727369fa4046deb977"
+    }
+  },
+  "code": {
+    "src/train.py": "b29629dd7e3bbd0b0ba632a7e59878aff99c063c429bbbe9b4e11efcc4ab0833",
+    "src/monitoring.py": "8bce23a138bc773ca13b831950061709d0e720cf4bfa98789eb81838d21c1b5f",
+    "src/artifacts.py": "d696938dabb47e5e67b0e4b9d79c3003b1a7cd5597176166916721727f5776dc",
+    "clean_report.py": "1e431ced1c711a32c5279f9ddb453a8d39b8fbd6e9eaa9aff56f24d83ab67851"
+  },
+  "references": [
+    {
+      "title": "Dataset and column dictionary",
+      "url": "https://www.kaggle.com/competitions/home-credit-default-risk/data"
+    },
+    {
+      "title": "Presentation reference: results, approach, train/test consistency",
+      "url": "https://github.com/sdolcecanto/home-credit-default-risk"
+    },
+    {
+      "title": "Presentation reference: model comparison and explainability",
+      "url": "https://github.com/ManishThumma/credit-risk-predictor"
+    },
+    {
+      "title": "scikit-learn: preprocessing and leakage",
+      "url": "https://scikit-learn.org/stable/common_pitfalls.html"
+    },
+    {
+      "title": "Nikita Ageev: PSI, drift, and cutoff diagnostics",
+      "url": "https://www.kaggle.com/code/truenikita/home-credit-psi-drift-and-re-setting-the-cutoff"
+    },
+    {
+      "title": "William Koehrsen: EDA, anomalies, and baseline modeling",
+      "url": "https://www.kaggle.com/code/willkoehrsen/start-here-a-gentle-introduction"
+    },
+    {
+      "title": "Home Aloan: first-place technical solution and experiment narrative",
+      "url": "https://www.kaggle.com/competitions/home-credit-default-risk/writeups/home-aloan-1st-place-solution"
+    }
+  ]
+}

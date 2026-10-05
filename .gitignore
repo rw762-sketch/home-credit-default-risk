@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+data/raw/*
+!data/raw/.gitkeep
+outputs/*
+!outputs/.gitkeep
+.DS_Store
+home-credit-default-risk.zip
+data/archive/
+tmp/

@@ -1,0 +1,89 @@
+{
+  "generated_at": "2026-10-04T22:43:03.607184-04:00",
+  "training_rerun": false,
+  "source_directory": "outputs/2026-10-04_01_home-credit",
+  "sources": {
+    "outputs/2026-10-04_01_home-credit/2026-10-04_05_metrics.json": {
+      "bytes": 436,
+      "sha256": "c4d0448935e11655027479e8a094349d014fdcab3f3b32d16ad3f29a83ed0f41"
+    },
+    "outputs/2026-10-04_01_home-credit/2026-10-04_06_model-comparison.csv": {
+      "bytes": 586,
+      "sha256": "042926071e611c2499898beead8a211d1c97546a9f330c66d2ed027026607a64"
+    },
+    "outputs/2026-10-04_01_home-credit/2026-10-04_08_roc-curve.png": {
+      "bytes": 45014,
+      "sha256": "fda69216641ce6f34d4cc6d035b2e7c4d4d4e551cca52906ac89c1b5b603344c"
+    },
+    "outputs/2026-10-04_01_home-credit/2026-10-04_09_precision-recall-curve.png": {
+      "bytes": 39648,
+      "sha256": "1aff6804d31fd13038382fca8fbec116fd22882141427e2ce4a08d8e5e6d7034"
+    },
+    "outputs/2026-10-04_01_home-credit/2026-10-04_10_confusion-matrix.png": {
+      "bytes": 24210,
+      "sha256": "8f1e32ff7472a96b5ff2fe90ac0c372464129d5f0afa4167211767c1c99f264b"
+    },
+    "outputs/2026-10-04_01_home-credit/2026-10-04_11_shap-summary.png": {
+      "bytes": 198124,
+      "sha256": "3a3f7fbb2018ff5168a68539cc79ccda4b21bd7ca19e6ddee5de693c3a21cd56"
+    },
+    "outputs/2026-10-04_01_home-credit/2026-10-04_12_feature-importance.csv": {
+      "bytes": 4449,
+      "sha256": "1bf1315a8698b2746bd226644d7dd8f7e01c65a560741008b71b081c90e25626"
+    },
+    "outputs/2026-10-04_01_home-credit/2026-10-04_13_feature-importance.png": {
+      "bytes": 85451,
+      "sha256": "e46833f2869c1812bf57e2e0cbf4a244e605a486eb843a55be51557d172a8bee"
+    },
+    "outputs/2026-10-04_01_home-credit/2026-10-04_14_missing-values.csv": {
+      "bytes": 3830,
+      "sha256": "5f66b7b729cb6a62a4c001497ca6f3ae634b0f03d791ec2a860f50dd07be35b5"
+    },
+    "outputs/2026-10-04_01_home-credit/2026-10-04_15_target-distribution.png": {
+      "bytes": 28170,
+      "sha256": "b02bee02126664a85363edbbb8ae5145634750e8a55226d48810e231a8908dbe"
+    },
+    "outputs/2026-10-04_01_home-credit/2026-10-04_16_correlation-heatmap.png": {
+      "bytes": 95434,
+      "sha256": "19de41f7099be066ba28e51974141d634b14febf740d1d042b2077ff0a546255"
+    },
+    "outputs/2026-10-04_01_home-credit/2026-10-04_17_holdout-predictions.csv": {
+      "bytes": 1915283,
+      "sha256": "10cb37dcd9139d1f2e04e1f0da1e6f668dbd66713295801d0fa05f922b51fd82"
+    },
+    "outputs/2026-10-04_01_home-credit/2026-10-04_18_evaluation-model.joblib": {
+      "bytes": 379034,
+      "sha256": "8ce74fcbf314131fb4396cd7d69d2dc7dc729edb1b0bd6197b076e6675999ff4"
+    },
+    "outputs/2026-10-04_01_home-credit/2026-10-04_19_submission.csv": {
+      "bytes": 1323328,
+      "sha256": "91de6e164daee7d4a521b97cdde82136889af67fcac72ee00f50f50195820169"
+    },
+    "outputs/2026-10-04_01_home-credit/2026-10-04_20_submission-model.joblib": {
+      "bytes": 378570,
+      "sha256": "c02760c12020975ece3f053da35fc94d6a97a85b8d8a2df2279a4df1181f0db9"
+    }
+  },
+  "code": {
+    "src/train.py": "b58a3c458c190fb1f2995ef2e8e059c5299a7e525f95fe4be0b826ce47e92548",
+    "clean_report.py": "d8907f4b0e72005a367ad4164d4a22b13a624b9893169fbdb7781566da26fe3e"
+  },
+  "references": [
+    {
+      "title": "Dataset and column dictionary",
+      "url": "https://www.kaggle.com/competitions/home-credit-default-risk/data"
+    },
+    {
+      "title": "Presentation reference: results, approach, train/test consistency",
+      "url": "https://github.com/sdolcecanto/home-credit-default-risk"
+    },
+    {
+      "title": "Presentation reference: model comparison and explainability",
+      "url": "https://github.com/ManishThumma/credit-risk-predictor"
+    },
+    {
+      "title": "scikit-learn: preprocessing and leakage",
+      "url": "https://scikit-learn.org/stable/common_pitfalls.html"
+    }
+  ]
+}
