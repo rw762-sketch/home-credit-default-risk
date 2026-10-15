@@ -1,0 +1,56 @@
+{
+  "evaluation": "Original development rows/folds; previously inspected data; no holdout scoring.",
+  "created_at": "2026-10-14T21:52:20.234897-04:00",
+  "development_rows": 246008,
+  "positives": 19860,
+  "excluded_holdout_rows": 61503,
+  "folds": 5,
+  "seed": 42,
+  "threads": 2,
+  "hgb_parameters": {
+    "max_iter": 150,
+    "max_leaf_nodes": 15,
+    "l2_regularization": 1,
+    "random_state": 42
+  },
+  "lgbm_parameters": {
+    "n_estimators": 200,
+    "learning_rate": 0.05,
+    "num_leaves": 15,
+    "reg_lambda": 1,
+    "random_state": 42,
+    "n_jobs": 2,
+    "verbosity": -1,
+    "deterministic": true,
+    "force_col_wise": true
+  },
+  "input_sha256": {
+    "application_train.csv": "52e96b895b1112e1c853f670e58372719c8441c5ed1c57ac2f7fad559d784f5f",
+    "2026-10-04_00_home-credit-default-risk.zip": "4e7a243b13f6e3d40f682a9a0cfd59c70910ca6c5a4289f71ca1f25efbd8e3de"
+  },
+  "measured_code_sha256": {
+    "compare_history.py": "9636009934163a6033073c851cbaeab462c73ddd5cf9855fe55bcb63ed811b98",
+    "installments.py": "0c0c4ec8e823fff57e7e43c9999c5eba1af950c5378f567daa87de105a129558",
+    "bureau.py": "706581c6daf71361189cfeff92d2f2b1aa9467b5a5084c8a701f1689d062589c",
+    "compare_bureau.py": "29b5bc5c59c3ead10f62cf198560809f88ad9912762537e313c11e5874536429",
+    "train.py": "b29629dd7e3bbd0b0ba632a7e59878aff99c063c429bbbe9b4e11efcc4ab0833",
+    "artifacts.py": "e210e33e622a2d4f066acde6d290546c28db2b8907ee6695b6fb65dc1ee26e61"
+  },
+  "versions": {
+    "numpy": "2.5.2",
+    "pandas": "3.0.6",
+    "scikit-learn": "1.9.1",
+    "threadpoolctl": "3.7.0",
+    "lightgbm": "4.7.0"
+  },
+  "publication_note": "Reuse/resume validation was hardened after measurement; features, model configurations and fold assignments were unchanged.",
+  "compact_file_sha256": {
+    "2026-10-15_34_bureau-audit.json": "2f7e493a019ea22cc4592045a8319130e6c5e251875580670583d4cd1d683ad8",
+    "2026-10-15_35_fold-metrics.csv": "1989ee692f3a236f3409fcdcf021401d1c791cd523d33fa2470567746716c306",
+    "2026-10-15_37_comparison.csv": "e2e5c9d62a152f468a645fa6a5d9cd132a5a16a4d9df22b4f7702a93acf23ade",
+    "2026-10-15_38_feature-schema.json": "c7191c72aa7c12487a661602928472e5da033e29e68468364dda91f7ecce1887",
+    "2026-10-15_39_installments-audit.json": "61854ba37b8fbea8c426d2afe1986e37083619e2db9b324f6494f5bb7ad43a8e",
+    "2026-10-15_40_operating-points.csv": "3b51320622b97eae44f3db6b68d557911e50a9312331a3f8e17e21dd6122462b",
+    "2026-10-15_41_paired-deltas.csv": "21ff43e05ca3ff65082cf65dea9cdc72c05be93d072552f7585f8acf75ceda38"
+  }
+}

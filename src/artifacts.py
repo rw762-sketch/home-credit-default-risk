@@ -22,6 +22,12 @@ ORDER = {
     'drift.csv': 28, 'drift_chart.png': 29,
     'monitoring_metrics.json': 30, 'data_quality.csv': 31,
     'age_risk.csv': 32, 'age_risk.png': 33,
+    'bureau_audit.json': 34, 'fold_metrics.csv': 35,
+    'fold_assignments.csv': 36, 'comparison.csv': 37,
+    'feature_schema.json': 38,
+    'installments_audit.json': 39, 'operating_points.csv': 40,
+    'paired_deltas.csv': 41,
+    'checkpoint.npz': 42,
 }
 
 

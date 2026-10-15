@@ -1,0 +1,27 @@
+{
+  "scoped_rows": 9279760,
+  "time_or_key_excluded_rows": 2091,
+  "exclusion_reasons_nonexclusive": {
+    "unknown_or_nonfinite_due_date": 0,
+    "future_due_date": 0,
+    "unknown_or_nonfinite_payment_date": 2091,
+    "future_payment_date": 0,
+    "invalid_installment_number": 0,
+    "invalid_version": 0
+  },
+  "scope": "Observed payment rows with both due/payment dates known and <= application day 0.",
+  "delay_definition": "Observed payment-tranche delay max(payment day - due day, 0); not loan cure time.",
+  "shortfall_definition": "One scheduled amount minus all known observed tranches by day 0, floored at zero.",
+  "availability_limit": "No inference of all unpaid obligations; supplied snapshot provenance is not independently verified.",
+  "ambiguous_schedule_or_duplicate_rows_excluded": 117688,
+  "eligible_payment_rows": 9159981,
+  "amounts_masked": {
+    "AMT_INSTALMENT": 0,
+    "AMT_PAYMENT": 0
+  },
+  "eligible_obligations": 8706315,
+  "applicants_with_eligible_history": 233304,
+  "source_rows": 13605401,
+  "read_chunk_rows": 250000,
+  "selected_applicants_without_eligible_history": 12704
+}

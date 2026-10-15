@@ -1,5 +1,11 @@
 # Report archive
 
+## History features and fixed-model comparison (development only)
+
+[Report](reports/2026-10-15_01_history-development/2026-10-15_02_report.md) · [Compact tables](reports/2026-10-15_01_history-development/data/) · [Manifest](reports/2026-10-15_01_history-development/2026-10-15_04_manifest.json)
+
+The October 15 follow-up compares application, bureau and installment features for HGB and LightGBM on the same full development folds. It reports ranking, probability quality, top-5/10/20% precision/recall, paired changes and runtime. The holdout is not scored. Applicant-level outputs remain local.
+
 ## Featured: model comparison, cutoff, calibration, and drift
 
 [Markdown](reports/2026-10-04_03_home-credit/2026-10-04_02_report.md) · [PDF](reports/2026-10-04_03_home-credit/2026-10-04_03_results.pdf) · [HTML](reports/2026-10-04_03_home-credit/2026-10-04_01_index.html) · [Start page](reports/2026-10-04_03_home-credit/2026-10-04_00_start-here.md)

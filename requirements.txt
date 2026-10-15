@@ -1,4 +1,4 @@
-///requirement///
+# Home Credit training and diagnostics
 
 pandas>=2.2,<4
 numpy>=2,<3

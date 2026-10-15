@@ -1,0 +1,23 @@
+{
+  "source_rows": 1716428,
+  "scoped_rows": 1171299,
+  "eligible_rows": 1171284,
+  "excluded_rows": 15,
+  "exclusion_reasons_nonexclusive": {
+    "unknown_or_nonfinite_credit_day": 0,
+    "future_credit_day": 0,
+    "unknown_or_nonfinite_update_day": 0,
+    "future_update_day": 15,
+    "invalid_actual_end_day": 0,
+    "future_actual_end_day": 0
+  },
+  "time_boundary": "application day 0; observed credit/update/closure dates <= 0",
+  "availability_limit": "Supplied snapshot dates are screened; source provenance is not independently verified.",
+  "negative_debt_policy": "Retain finite signed net debt; do not silently clip credit balances.",
+  "amounts_masked": {
+    "AMT_CREDIT_SUM": 0,
+    "AMT_CREDIT_SUM_DEBT": 0,
+    "AMT_CREDIT_SUM_OVERDUE": 0
+  },
+  "applicants_with_eligible_history": 210763
+}
