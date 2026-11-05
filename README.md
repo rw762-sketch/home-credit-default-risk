@@ -4,18 +4,17 @@ A credit-risk study using **307,511 labeled applications**, with application-tab
 
 ## TL;DR
 
-- **October 4 model ranking:** histogram gradient boosting reached **0.7605 mean cross-validation ROC-AUC** and **0.7654 random-holdout ROC-AUC**, ahead of the configured logistic regression and random forest baselines.
-- **Cutoff tradeoff:** selecting **0.0844** from development predictions raises reused-holdout recall from **1.85% to 67.19%**, while precision falls from **63.45% to 17.69%**. This is an error tradeoff; lending profit has not been measured.
-- **Monitoring:** score PSI is **0.00384**, yet some input distributions shift substantially. A stable score distribution does not establish stable calibration or predictive performance.
-- **October 15 development follow-up:** `hgb_application_bureau_installments` reached **0.7734 mean fold AUC** and **0.2605 OOF AP** on matched development folds. This uses previously inspected development data; the original holdout was not scored. See [the experiment ledger](EXPERIMENTS.md#full-development-staged-follow-up) for all variants and precision/recall tradeoffs.
+- **Current best (November 5):** with application, bureau, installment-payment and previous-application features, histogram gradient boosting (HGB) and LightGBM both reach **0.7801 mean fold ROC-AUC** (0.780062 vs 0.780078). The application-only score under the same protocol is 0.7623. The two algorithms are tied on ranking, and LightGBM fits in about a quarter of HGB's time.
+- **What helped:** each credit-history family improved AUC in all five folds. For HGB, bureau added **+0.0058**, installments **+0.0083**, and previous applications **+0.0038**. A bundle of external-score summaries and application ratios showed **no gain** (−0.0002; its interval includes zero).
+- **Operating point:** when flagging the riskiest 5% of applicants, HGB precision rises from **33.3% to 35.9%** and recall from **20.6% to 22.3%** relative to application-only.
+- **October 4 baseline:** application-only HGB reached **0.7605 mean CV AUC** and **0.7654 random-holdout AUC**, ahead of logistic regression and random forest. A development-selected cutoff of **0.0844** raises holdout recall from 1.85% to 67.19% while precision falls from 63.45% to 17.69%.
+- **Evaluation boundary:** the November results come from cross-validation on previously inspected development data. The original holdout was not scored, and independent final evaluation is still open.
 
-[History follow-up](reports/2026-10-15_01_history-development/2026-10-15_02_report.md) · [Technical report](reports/2026-10-04_03_home-credit/2026-10-04_02_report.md) · [PDF](reports/2026-10-04_03_home-credit/2026-10-04_03_results.pdf) · [Browser report](reports/2026-10-04_03_home-credit/2026-10-04_01_index.html) · [Experiment ledger](EXPERIMENTS.md) · [Report archive](REPORTS.md)
-
-[November 5 higher-budget results](reports/2026-11-05_04_extended-history/2026-11-05_02_report.md): The November 5 comparison reaches **0.780062 mean fold AUC for HGB and 0.780078 for LightGBM** with the tested history families: effectively tied ranking results in this experiment. LightGBM took 288.5 fit seconds versus HGB's 1,082.3; HGB had slightly higher pooled OOF AP (0.270274 versus 0.269765). Previous-application history improved both algorithms, while the application-feature bundle showed no clear gain. These are previously inspected development results; the holdout remains excluded and independent final evaluation is unresolved.
+[November 5 report](reports/2026-11-05_04_extended-history/2026-11-05_02_report.md) · [October 15 history follow-up](reports/2026-10-15_01_history-development/2026-10-15_02_report.md) · [October 4 technical report](reports/2026-10-04_03_home-credit/2026-10-04_02_report.md) · [PDF](reports/2026-10-04_03_home-credit/2026-10-04_03_results.pdf) · [Browser report](reports/2026-10-04_03_home-credit/2026-10-04_01_index.html) · [Experiment ledger](EXPERIMENTS.md) · [Report archive](REPORTS.md)
 
 ## Contents
 
-1. [Results: models, cutoffs, calibration, and drift](#results)
+1. [Results: credit-history stages, models, cutoffs, calibration, and drift](#results)
 2. [Data and validation](#data-and-validation)
 3. [Reproduce the experiment](#reproduce)
 4. [Repository structure](#repository-structure)
@@ -26,7 +25,32 @@ The report follows the question → experiment → evidence → decision format.
 
 ## Results
 
-### Model comparison
+### Credit-history stages (November 5)
+
+Each stage adds one feature family to the previous one. All variants use the same 246,008 development applications and five folds. Every model uses a learning rate of 0.05 and up to 1,000 rounds, and stops early on an inner split of its own training fold. No fold reached the 1,000-round ceiling.
+
+| Stage | Features | HGB mean fold AUC | LightGBM mean fold AUC | HGB OOF AP | Change vs previous stage (HGB, folds improved) |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Application only | 123 | 0.7623 | 0.7631 | 0.2455 | — |
+| + Bureau | 137 | 0.7681 | 0.7683 | 0.2543 | +0.0058 (5/5) |
+| + Installment payments | 153 | 0.7765 | 0.7767 | 0.2648 | +0.0083 (5/5) |
+| + External-score / ratio bundle | 162 | 0.7763 | 0.7762 | 0.2647 | −0.0002 (2/5) |
+| + Previous applications | 178 | **0.7801** | **0.7801** | **0.2703** | +0.0038 (5/5) |
+
+Paired bootstrap of pooled OOF predictions (1,000 replicates, stratified by fold and label):
+
+| Comparison | ΔAUC | 95% interval | ΔAP | 95% interval |
+| --- | ---: | --- | ---: | --- |
+| HGB: + previous applications | +0.0038 | [+0.0030, +0.0046] | +0.0056 | [+0.0037, +0.0073] |
+| LightGBM: + previous applications | +0.0039 | [+0.0031, +0.0047] | +0.0049 | [+0.0032, +0.0066] |
+| HGB: + external-score / ratio bundle | −0.0002 | [−0.0010, +0.0006] | −0.0001 | [−0.0018, +0.0015] |
+| LightGBM vs HGB, all features | −0.00001 | [−0.0006, +0.0006] | −0.0005 | [−0.0017, +0.0007] |
+
+These intervals hold the fitted scores fixed. They don't include refitting variance, model selection, overlapping training folds, or population shift, so they are not generalization confidence intervals. The October 15 predictions get the same audit in a [separate report](reports/2026-11-05_03_original-history-audit/2026-11-05_02_report.md), where bureau plus installments gives ΔAUC +0.0129 [+0.0115, +0.0142].
+
+The November runs changed the learning rate, round budget, stopping rule and refitting together. So the gain over October 15 (0.7734 → 0.7765 for the same features) can't be attributed to any single one of those changes. The full per-stage tables, top-k precision/recall and run times are in the [November 5 report](reports/2026-11-05_04_extended-history/2026-11-05_02_report.md).
+
+### Model comparison (October 4, application table only)
 
 All candidates use the same features and five stratified development folds. The winner is selected by mean fold ROC-AUC.
 
@@ -65,7 +89,7 @@ The selected rule flags **30.65%** of applications. It catches more repayment-di
 
 ## Data and validation
 
-Data comes from [Kaggle Home Credit Default Risk](https://www.kaggle.com/competitions/home-credit-default-risk/data). The published October 4 study uses `application_train.csv` and `application_test.csv`. The opt-in bureau experiment below adds one historical feature family separately; it does not change the published benchmark. The competition test table has **48,744 unlabeled rows**, so local test predictions cannot provide AUC.
+Data comes from [Kaggle Home Credit Default Risk](https://www.kaggle.com/competitions/home-credit-default-risk/data). The published October 4 study uses `application_train.csv` and `application_test.csv`. The history experiments below add `bureau.csv`, `installments_payments.csv` and `previous_application.csv` as separate stages; they do not change the published benchmark. The competition test table has **48,744 unlabeled rows**, so local test predictions cannot provide AUC.
 
 1. Validate binary labels and unique applicant IDs. Remove the ID and target from predictors.
 2. Replace the employment sentinel `365243` with missing values. Add credit/income, annuity/income, and credit/annuity ratios.
@@ -213,7 +237,13 @@ Within each run, files use `YYYY-MM-DD_NN_description.ext`. `NN` is a reading-or
 
 ## Limitations and next experiments
 
-This is a reproducible application-table baseline with diagnostic extensions. It does not demonstrate production readiness, lending profitability, fairness, or a winning competition solution.
+This is a reproducible application-table baseline plus matched development experiments with three credit-history tables. It does not demonstrate production readiness, lending profitability, fairness, or a winning competition solution.
+
+Next steps, in order:
+
+1. Freeze the full-feature pipeline and score it once on independent data, for example a Kaggle late submission.
+2. Test the remaining history tables: `bureau_balance`, `POS_CASH_balance` and `credit_card_balance`.
+3. Test previous-application history without the external-score / ratio bundle, which showed no gain.
 
 - The holdout has been reused. Future model development needs independent final evaluation data.
 - External-score provenance and predictor availability at application time require further review.
