@@ -1,0 +1,14 @@
+{
+  "lgbm_application_bureau_installments": {
+    "roc_auc": 0.7767405544615589,
+    "average_precision": 0.264547532593195,
+    "brier": 0.0667330499630206,
+    "log_loss": 0.24075336483474907
+  },
+  "lgbm_application_bureau_installments_ext": {
+    "roc_auc": 0.7761934181326701,
+    "average_precision": 0.26487590942501843,
+    "brier": 0.06672834551980962,
+    "log_loss": 0.24077660447656216
+  }
+}

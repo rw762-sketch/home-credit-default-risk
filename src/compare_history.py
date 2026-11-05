@@ -11,15 +11,104 @@ from time import perf_counter
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingClassifier
+from sklearn.metrics import average_precision_score, roc_auc_score
+from sklearn.model_selection import train_test_split
 from threadpoolctl import threadpool_limits
 
+from src.application import add_application_features
 from src.artifacts import artifact_path, new_run, TZ
 from src.bureau import aggregate_bureau, join_bureau, read_bureau
 from src.compare_bureau import development_folds, probability_metrics, sha256
 from src.installments import aggregate_installments, join_installments, read_installments
+from src.previous import aggregate_previous, join_previous, read_previous
 from src.train import SEED, features, pipeline
 
-STAGES = ['application_only', 'application_bureau', 'application_bureau_installments']
+# Each stage adds one feature family to the previous stage.
+STAGES = ['application_only', 'application_bureau', 'application_bureau_installments',
+          'application_bureau_installments_ext', 'application_bureau_installments_ext_previous']
+LEGACY_STAGES = STAGES[:3]
+INNER_VALIDATION_FRACTION = .1
+
+
+def fit_fold(x, y, algorithm, hgb_params, lgbm_params, patience, lightgbm_class, seed):
+    """Fit one outer training fold; early stopping never sees the outer validation fold.
+
+    With patience set, both algorithms use the same stratified inner split.
+    Preprocessing is learned on inner-training rows only during stopping.
+    Then preprocessing and a fixed-length model are refitted on the full outer
+    training fold. The legacy no-patience path preserves the original fits.
+    """
+    y = np.asarray(y)
+    estimator = (HistGradientBoostingClassifier(**hgb_params) if algorithm == 'hgb'
+                 else lightgbm_class(**lgbm_params))
+    model = pipeline(x, estimator)
+    if patience is None:
+        model.fit(x, y)
+        return model, int(model['model'].n_iter_)
+    inner, stop = train_test_split(np.arange(len(y)), test_size=INNER_VALIDATION_FRACTION,
+                                   stratify=y, random_state=seed)
+    preprocess = model['preprocess']
+    x_inner = preprocess.fit_transform(x.iloc[inner])
+    x_stop = preprocess.transform(x.iloc[stop])
+    if algorithm == 'hgb':
+        estimator.set_params(early_stopping=True, n_iter_no_change=patience, scoring='loss')
+        estimator.fit(x_inner, y[inner], X_val=x_stop, y_val=y[stop])
+        # HGB includes the patience tail in n_iter_; choose the best observed loss.
+        iterations = int(np.argmax(estimator.validation_score_[1:])+1)
+        final_estimator = HistGradientBoostingClassifier(**{
+            **hgb_params, 'max_iter': iterations, 'early_stopping': False})
+        search_iterations = int(estimator.n_iter_)
+    else:
+        from lightgbm import early_stopping, record_evaluation
+        evaluations = {}
+        estimator.fit(x_inner, y[inner], eval_set=[(x_stop, y[stop])],
+                      eval_metric='binary_logloss',
+                      callbacks=[early_stopping(patience, verbose=False), record_evaluation(evaluations)])
+        iterations = int(estimator.best_iteration_ or estimator.n_iter_)
+        search_iterations = len(evaluations['valid_0']['binary_logloss'])
+        final_estimator = lightgbm_class(**{**lgbm_params, 'n_estimators': iterations})
+    final = pipeline(x, final_estimator).fit(x, y)
+    final.audit_search_iterations_ = search_iterations
+    final.audit_selected_iterations_ = iterations
+    return final, int(final['model'].n_iter_)
+
+
+def paired_bootstrap(labels, baseline, candidate, replicates, seed=SEED):
+    """Stratified applicant bootstrap of pooled-OOF AUC/AP differences.
+
+    Both models are scored on the same resampled applicants, so the interval
+    reflects their correlation. Resamples are drawn within each label to keep
+    the prevalence fixed. Percentile intervals; not a multiplicity correction.
+    """
+    labels = np.asarray(labels)
+    baseline, candidate = np.asarray(baseline), np.asarray(candidate)
+    positives, negatives = np.flatnonzero(labels == 1), np.flatnonzero(labels == 0)
+    if labels.ndim != 1 or baseline.shape != labels.shape or candidate.shape != labels.shape:
+        raise ValueError('Bootstrap labels and probabilities must have identical one-dimensional shapes.')
+    if not np.isin(labels, [0, 1]).all():
+        raise ValueError('Bootstrap needs binary labels and both classes.')
+    if any(not np.isfinite(p).all() or ((p < 0) | (p > 1)).any() for p in [baseline, candidate]):
+        raise ValueError('Bootstrap probabilities must be finite and in [0, 1].')
+    if replicates < 1 or not len(positives) or not len(negatives):
+        raise ValueError('Bootstrap needs at least one replicate and both classes.')
+    rng = np.random.default_rng(seed)
+    deltas = np.empty((replicates, 2))
+    for r in range(replicates):
+        index = np.concatenate([rng.choice(positives, len(positives)),
+                                rng.choice(negatives, len(negatives))])
+        y = labels[index]
+        deltas[r] = [roc_auc_score(y, candidate[index]) - roc_auc_score(y, baseline[index]),
+                     average_precision_score(y, candidate[index]) -
+                     average_precision_score(y, baseline[index])]
+    point = [roc_auc_score(labels, candidate) - roc_auc_score(labels, baseline),
+             average_precision_score(labels, candidate) - average_precision_score(labels, baseline)]
+    row = {'replicates': replicates, 'seed': seed}
+    for i, metric in enumerate(['auc', 'ap']):
+        row.update({f'{metric}_delta': float(point[i]),
+                    f'{metric}_ci_low': float(np.quantile(deltas[:, i], .025)),
+                    f'{metric}_ci_high': float(np.quantile(deltas[:, i], .975)),
+                    f'{metric}_positive_fraction': float((deltas[:, i] > 0).mean())})
+    return row
 
 
 def save_checkpoint(path, signature, predictions, fold_rows):
@@ -96,13 +185,16 @@ def operating_points(ids, labels, probability):
     return rows
 
 
-def cached_bureau_run(folder, assignments, train, archive, max_iter):
+def cached_bureau_run(folder, assignments, train, archive, max_iter, hgb_params=None):
     """Reuse only identical inputs, cohort, labels, folds, code, and HGB settings."""
     folder = Path(folder)
     manifest = json.loads(artifact_path(folder, 'manifest.json').read_text())
     metrics = json.loads(artifact_path(folder, 'metrics.json').read_text())
-    if metrics['model_parameters'] != {'max_iter': max_iter, 'max_leaf_nodes': 15,
-                                       'l2_regularization': 1, 'random_state': SEED}:
+    expected = hgb_params or {'max_iter': max_iter, 'max_leaf_nodes': 15,
+                              'l2_regularization': 1, 'random_state': SEED}
+    # The bureau runner only uses the original HGB settings, so any learning-rate
+    # or early-stopping change makes its predictions non-reusable.
+    if metrics['model_parameters'] != expected:
         raise ValueError('Cached HGB configuration differs from this experiment.')
     for path in [train, archive]:
         if manifest['inputs'].get(str(path.resolve())) != sha256(path):
@@ -141,8 +233,23 @@ def cached_bureau_run(folder, assignments, train, archive, max_iter):
 
 def run(args):
     started = perf_counter()
-    if not 2 <= args.folds <= 5 or not 1 <= args.max_iter <= 150 or not 1 <= args.lgbm_estimators <= 200 or args.threads < 1:
-        raise ValueError('Use 2-5 folds, 1-150 HGB iterations, 1-200 LightGBM trees, and positive threads.')
+    # Older callers (and tests) may omit the newer options; these defaults
+    # reproduce the original October 15 configuration exactly.
+    stages = list(getattr(args, 'stages', None) or LEGACY_STAGES)
+    learning_rate = getattr(args, 'learning_rate', None)
+    patience = getattr(args, 'patience', None)
+    bootstrap = getattr(args, 'bootstrap', 0) or 0
+    if not 2 <= args.folds <= 5 or args.max_iter < 1 or args.lgbm_estimators < 1 or args.threads < 1:
+        raise ValueError('Use 2-5 folds, positive HGB iterations/LightGBM trees, and positive threads.')
+    if patience is not None and patience < 1:
+        raise ValueError('--patience must be a positive number of rounds.')
+    if learning_rate is not None and not 0 < learning_rate <= 1:
+        raise ValueError('--learning-rate must be in (0, 1].')
+    if bootstrap < 0:
+        raise ValueError('--bootstrap must be nonnegative.')
+    if not stages or any(s not in STAGES for s in stages) or len(set(stages)) != len(stages):
+        raise ValueError(f'--stages must be distinct names from {STAGES}.')
+    stages = [s for s in STAGES if s in stages]  # Cumulative order defines paired contrasts.
     resume = getattr(args, 'resume', False)
     if resume and args.output is None:
         raise ValueError('--resume requires the existing --output directory.')
@@ -160,27 +267,64 @@ def run(args):
         pd.read_csv(args.train), args.folds, args.max_development_rows)
     assignments = selected[['SK_ID_CURR', 'TARGET']].copy()
     assignments['fold'] = fold_ids
+    hgb_params = {'max_iter': args.max_iter, 'max_leaf_nodes': 15, 'l2_regularization': 1, 'random_state': SEED}
+    if learning_rate is not None:
+        hgb_params['learning_rate'] = learning_rate
+    if patience is not None:
+        hgb_params.update({'early_stopping': True, 'n_iter_no_change': patience,
+                           'validation_fraction': INNER_VALIDATION_FRACTION})
+    lgbm_params = {'n_estimators': args.lgbm_estimators,
+                   'learning_rate': .05 if learning_rate is None else learning_rate,
+                   'num_leaves': 15, 'reg_lambda': 1, 'random_state': SEED, 'n_jobs': args.threads,
+                   'verbosity': -1, 'deterministic': True, 'force_col_wise': True}
     predictions, fold_rows, cache = {}, [], None
     if args.reuse_bureau_run:
         predictions, fold_rows, cache = cached_bureau_run(
-            args.reuse_bureau_run, assignments, args.train, args.archive, args.max_iter)
+            args.reuse_bureau_run, assignments, args.train, args.archive, args.max_iter, hgb_params)
+        predictions = {k: v for k, v in predictions.items() if k.split('_', 1)[1] in stages}
+        fold_rows = [r for r in fold_rows if r['variant'] in predictions]
         print(f'Verified and reused {len(predictions)} HGB OOF variants; no duplicate fits.', flush=True)
-    bureau, bureau_audit = aggregate_bureau(read_bureau(args.archive), selected.SK_ID_CURR)
-    with_bureau = join_bureau(selected, bureau)
-    print('Reading scoped installment history in 250,000-row chunks...', flush=True)
-    raw_installments, read_audit = read_installments(args.archive, selected.SK_ID_CURR)
-    installments, installment_audit = aggregate_installments(raw_installments)
-    del raw_installments
-    installment_audit.update(read_audit)
-    combined = join_installments(with_bureau, installments)
-    installment_audit['selected_applicants_without_eligible_history'] = int(combined.INST_EVENT_COUNT.eq(0).sum())
-    variants = {'application_only': features(selected), 'application_bureau': features(with_bureau),
-                'application_bureau_installments': features(combined)}
-    del selected, with_bureau, combined, bureau, installments
+    audits, variants = {}, {}
+    if 'application_only' in stages:
+        variants['application_only'] = features(selected)
+    frame = selected
+    if any(s != 'application_only' for s in stages):
+        bureau, audits['bureau'] = aggregate_bureau(read_bureau(args.archive), selected.SK_ID_CURR)
+        frame = join_bureau(frame, bureau)
+        del bureau
+        if 'application_bureau' in stages:
+            variants['application_bureau'] = features(frame)
+    if any(s.startswith('application_bureau_installments') for s in stages):
+        print('Reading scoped installment history in 250,000-row chunks...', flush=True)
+        raw_installments, read_audit = read_installments(args.archive, selected.SK_ID_CURR)
+        installments, audits['installments'] = aggregate_installments(raw_installments)
+        del raw_installments
+        audits['installments'].update(read_audit)
+        frame = join_installments(frame, installments)
+        del installments
+        audits['installments']['selected_applicants_without_eligible_history'] = int(frame.INST_EVENT_COUNT.eq(0).sum())
+        if 'application_bureau_installments' in stages:
+            variants['application_bureau_installments'] = features(frame)
+    if any(s.startswith('application_bureau_installments_ext') for s in stages):
+        frame = add_application_features(frame)
+        if 'application_bureau_installments_ext' in stages:
+            variants['application_bureau_installments_ext'] = features(frame)
+    if 'application_bureau_installments_ext_previous' in stages:
+        print('Reading scoped previous applications in 250,000-row chunks...', flush=True)
+        raw_previous, read_audit = read_previous(args.archive, selected.SK_ID_CURR)
+        previous, audits['previous'] = aggregate_previous(raw_previous)
+        del raw_previous
+        audits['previous'].update(read_audit)
+        frame = join_previous(frame, previous)
+        audits['previous']['selected_applicants_without_eligible_history'] = int(frame.PREV_APPLICATION_COUNT.eq(0).sum())
+        variants['application_bureau_installments_ext_previous'] = features(frame)
+        del previous
+    del selected, frame
     out = args.output or new_run('history-comparison')
     if args.output and not resume:
         out.mkdir(parents=True, exist_ok=False)
-    code_names = ['compare_history.py', 'installments.py', 'bureau.py', 'compare_bureau.py', 'train.py', 'artifacts.py']
+    code_names = ['compare_history.py', 'installments.py', 'bureau.py', 'compare_bureau.py', 'train.py',
+                  'artifacts.py', 'application.py', 'previous.py']
     input_hashes = {str(p.resolve()): sha256(p) for p in [args.train, args.archive]}
     code_hashes = {name: sha256(Path(__file__).with_name(name)) for name in code_names}
     versions = {name: version(name) for name in ['numpy', 'pandas', 'scikit-learn', 'threadpoolctl']
@@ -188,25 +332,26 @@ def run(args):
     signature_content = {'inputs': input_hashes, 'code': code_hashes, 'versions': versions,
                          'assignments': assignments.to_dict('list'), 'folds': args.folds,
                          'max_iter': args.max_iter, 'lgbm_estimators': args.lgbm_estimators,
-                         'include_lightgbm': args.include_lightgbm, 'threads': args.threads}
+                         'include_lightgbm': args.include_lightgbm, 'threads': args.threads,
+                         'stages': stages, 'learning_rate': learning_rate, 'patience': patience}
     signature = hashlib.sha256(json.dumps(signature_content, sort_keys=True).encode()).hexdigest()
     checkpoint = artifact_path(out, 'checkpoint.npz')
     if resume:
         saved_assignments = pd.read_csv(artifact_path(out, 'fold_assignments.csv'))
         pd.testing.assert_frame_equal(saved_assignments, assignments, check_dtype=False)
         predictions, fold_rows = load_checkpoint(checkpoint, signature, assignments)
+        expected_names = {f'{algorithm}_{stage}' for algorithm in
+                          (['hgb', 'lgbm'] if args.include_lightgbm else ['hgb']) for stage in stages}
+        if not set(predictions).issubset(expected_names):
+            raise ValueError('Checkpoint contains unexpected variants.')
         print(f'Resuming {len(fold_rows)} verified completed variant/folds.', flush=True)
     else:
         assignments.to_csv(artifact_path(out, 'fold_assignments.csv'), index=False)
         save_checkpoint(checkpoint, signature, predictions, fold_rows)
     algorithms = ['hgb', 'lgbm'] if args.include_lightgbm else ['hgb']
     labels = assignments.TARGET.to_numpy()
-    hgb_params = {'max_iter': args.max_iter, 'max_leaf_nodes': 15, 'l2_regularization': 1, 'random_state': SEED}
-    lgbm_params = {'n_estimators': args.lgbm_estimators, 'learning_rate': .05, 'num_leaves': 15,
-                   'reg_lambda': 1, 'random_state': SEED, 'n_jobs': args.threads, 'verbosity': -1,
-                   'deterministic': True, 'force_col_wise': True}
     for algorithm in algorithms:
-        for stage in STAGES:
+        for stage in stages:
             name = f'{algorithm}_{stage}'
             if name in predictions and np.isfinite(predictions[name]).all():
                 continue
@@ -218,13 +363,15 @@ def run(args):
                     if any(row['variant'] == name and row['fold'] == int(fold) for row in fold_rows):
                         continue
                     tick = perf_counter()
-                    estimator = (HistGradientBoostingClassifier(**hgb_params) if algorithm == 'hgb'
-                                 else lightgbm_class(**lgbm_params))
-                    model = pipeline(variants[stage], estimator).fit(variants[stage].loc[train], labels[train])
+                    model, iterations = fit_fold(
+                        variants[stage].loc[train], labels[train], algorithm, hgb_params,
+                        lgbm_params, patience, lightgbm_class, SEED + int(fold))
                     p[val] = model.predict_proba(variants[stage].loc[val])[:, 1]
                     row = {'variant': name, 'fold': int(fold), 'training_rows': int(train.sum()),
                            'validation_rows': int(val.sum()), 'cached': False,
-                           'iterations': int(model['model'].n_iter_),
+                           'iterations': iterations,
+                           'selected_iterations': int(getattr(model, 'audit_selected_iterations_', iterations)),
+                           'search_iterations': int(getattr(model, 'audit_search_iterations_', iterations)),
                            'seconds': round(perf_counter()-tick, 3), **probability_metrics(labels[val], p[val])}
                     fold_rows.append(row)
                     save_checkpoint(checkpoint, signature, predictions, fold_rows)
@@ -237,24 +384,30 @@ def run(args):
             # Save completed variants so a connection interruption loses no results.
             partial = assignments.assign(**predictions)
             partial.to_csv(artifact_path(out, 'development_predictions.csv'), index=False)
+    validate_fold_records(predictions, fold_rows, assignments, complete=True)
     fold_table = pd.DataFrame(fold_rows)
     summary, points = [], []
     for name, p in predictions.items():
         fold_scores = fold_table.loc[fold_table.variant.eq(name)]
         stage = name.split('_', 1)[1]
+        search_iterations = fold_scores.get('search_iterations', fold_scores.iterations).fillna(fold_scores.iterations)
+        ceiling = args.max_iter if name.startswith('hgb_') else args.lgbm_estimators
         summary.append({'variant': name, 'features': variants[stage].shape[1],
                         'mean_fold_auc': float(fold_scores.roc_auc.mean()),
                         'fold_auc_std': float(fold_scores.roc_auc.std(ddof=0)),
+                        'mean_iterations': float(fold_scores.iterations.mean()),
+                        'mean_search_iterations': float(search_iterations.mean()),
+                        'budget_reached_folds': int(search_iterations.ge(ceiling).sum()),
                         'fit_seconds': float(fold_scores.seconds.sum()),
                         **{f'oof_{k}': v for k, v in probability_metrics(labels, p).items()}})
         for split, mask in [('pooled OOF', np.ones(len(labels), dtype=bool)),
                             *[(f'fold {fold}', fold_ids == fold) for fold in sorted(np.unique(fold_ids))]]:
             points.extend({'variant': name, 'split': split, **row} for row in
                           operating_points(assignments.SK_ID_CURR[mask], labels[mask], p[mask]))
-    contrasts = [(f'{alg}_{STAGES[i]}', f'{alg}_{STAGES[i+1]}')
-                 for alg in algorithms for i in [0, 1]]
+    contrasts = [(f'{alg}_{stages[i]}', f'{alg}_{stages[i+1]}')
+                 for alg in algorithms for i in range(len(stages)-1)]
     if args.include_lightgbm:
-        contrasts += [(f'hgb_{stage}', f'lgbm_{stage}') for stage in STAGES]
+        contrasts += [(f'hgb_{stage}', f'lgbm_{stage}') for stage in stages]
     paired = []
     for base, candidate in contrasts:
         a = fold_table[fold_table.variant.eq(base)].set_index('fold')
@@ -263,7 +416,15 @@ def run(args):
             paired.append({'baseline': base, 'candidate': candidate, 'fold': int(fold),
                            **{f'{metric}_delta': float(b.loc[fold, metric]-a.loc[fold, metric])
                               for metric in ['roc_auc', 'average_precision', 'brier', 'log_loss']}})
+    bootstrap_rows = []
+    if bootstrap:
+        print(f'Paired bootstrap: {bootstrap} stratified replicates per contrast...', flush=True)
+        for base, candidate in contrasts:
+            bootstrap_rows.append({'baseline': base, 'candidate': candidate,
+                                   **paired_bootstrap(labels, predictions[base], predictions[candidate], bootstrap)})
     metadata = {'created_at': datetime.now(TZ).isoformat(), 'evaluation': 'Matched development CV; not fresh validation.',
+                'stages': stages, 'learning_rate': learning_rate, 'patience': patience,
+                'bootstrap_replicates': bootstrap,
                 'selected_development_rows': len(labels), 'full_development_rows': full_rows,
                 'excluded_holdout_rows': hold_rows, 'positive_rows': int(labels.sum()),
                 'positive_prevalence': float(labels.mean()), 'folds': args.folds, 'seed': SEED,
@@ -272,7 +433,13 @@ def run(args):
                 'summary': summary, 'reused_bureau_run': cache,
                 'current_run_wall_seconds': round(perf_counter()-started, 3),
                 'limitations': ['All estimates use previously inspected development data; holdout is not scored.',
-                                'Fixed configured models: HGB internal early stopping and LightGBM fixed tree budget differ.',
+                                ('Early stopping and its preprocessing use only a stratified inner-training split; '
+                                 'the chosen length is refitted on the full outer training fold. Outer validation is excluded.'
+                                 if patience is not None else
+                                 'Fixed configured models: HGB internal early stopping and LightGBM fixed tree budget differ.'),
+                                'Bootstrap intervals condition on fixed OOF scores and label prevalence; '
+                                'they omit refitting, overlapping-fold dependence, selection and population shift. '
+                                'They are not generalization confidence intervals or significance tests.',
                                 'Installment features describe observed past-payment tranches, not every unpaid obligation.',
                                 'Ambiguous schedules/duplicate events are conservatively excluded; snapshots need provenance review.',
                                 'Top-k policies are descriptive capacity comparisons, not tuned lending decisions.']}
@@ -282,20 +449,35 @@ def run(args):
                 'native_library_fallback': os.environ.get('DYLD_FALLBACK_LIBRARY_PATH'),
                 'fold_assignments_sha256': sha256(artifact_path(out, 'fold_assignments.csv')),
                 'predictions_sha256': sha256(artifact_path(out, 'development_predictions.csv'))}
-    for name, data in [('metrics.json', metadata), ('manifest.json', manifest),
-                       ('bureau_audit.json', bureau_audit), ('installments_audit.json', installment_audit),
+    audit_files = [(f'{family}_audit.json', audit) for family, audit in audits.items()]
+    for name, data in [('metrics.json', metadata), ('manifest.json', manifest), *audit_files,
                        ('feature_schema.json', {name: x.columns.tolist() for name, x in variants.items()})]:
         artifact_path(out, name).write_text(json.dumps(data, indent=2, allow_nan=False)+'\n')
-    for name, data in [('comparison.csv', pd.DataFrame(summary)), ('operating_points.csv', pd.DataFrame(points)),
-                       ('paired_deltas.csv', pd.DataFrame(paired)), ('fold_metrics.csv', fold_table)]:
+    tables = [('comparison.csv', pd.DataFrame(summary)), ('operating_points.csv', pd.DataFrame(points)),
+              ('paired_deltas.csv', pd.DataFrame(paired)), ('fold_metrics.csv', fold_table)]
+    if bootstrap_rows:
+        tables.append(('bootstrap_deltas.csv', pd.DataFrame(bootstrap_rows)))
+    for name, data in tables:
         data.to_csv(artifact_path(out, name), index=False)
+    configuration = (f'HGB max_iter {args.max_iter}; LightGBM trees {args.lgbm_estimators}; '
+                     f'learning rate {"default" if learning_rate is None else learning_rate}; '
+                     f'inner-split patience {"original" if patience is None else patience}.')
+    bootstrap_lines = [] if not bootstrap_rows else [
+        f'Paired stratified bootstrap of pooled OOF differences ({bootstrap} replicates, 95% percentile intervals):', '',
+        '| Baseline → candidate | ΔAUC | 95% interval | ΔAP | 95% interval |',
+        '| --- | ---: | --- | ---: | --- |',
+        *[f'| {b["baseline"]} → {b["candidate"]} | {b["auc_delta"]:+.5f} | '
+          f'[{b["auc_ci_low"]:+.5f}, {b["auc_ci_high"]:+.5f}] | {b["ap_delta"]:+.5f} | '
+          f'[{b["ap_ci_low"]:+.5f}, {b["ap_ci_high"]:+.5f}] |' for b in bootstrap_rows], '']
     lines = ['# Staged credit-history and model comparison', '',
              f'{len(labels):,} development applications; {int(labels.sum()):,} positives ({labels.mean():.2%}); '
              f'{args.folds} matched folds, seed {SEED}, {args.threads} native threads. Holdout excluded.', '',
-             '| Variant | Mean fold AUC | OOF AP | OOF Brier | Fit seconds (including reused fits) |',
-             '| --- | ---: | ---: | ---: | ---: |',
-             *[f'| {s["variant"]} | {s["mean_fold_auc"]:.6f} | {s["oof_average_precision"]:.6f} | '
-               f'{s["oof_brier"]:.6f} | {s["fit_seconds"]:.1f} |' for s in summary], '',
+             configuration, '',
+             '| Variant | Features | Mean fold AUC | OOF AP | OOF Brier | Mean iterations | Fit seconds (including reused fits) |',
+             '| --- | ---: | ---: | ---: | ---: | ---: | ---: |',
+             *[f'| {s["variant"]} | {s["features"]} | {s["mean_fold_auc"]:.6f} | {s["oof_average_precision"]:.6f} | '
+               f'{s["oof_brier"]:.6f} | {s["mean_iterations"]:.0f} | {s["fit_seconds"]:.1f} |' for s in summary], '',
+             *bootstrap_lines,
              'Top-risk policies (pooled OOF; applicant ID breaks score ties):', '',
              '| Variant | Policy | TP | FP | Precision | Recall |', '| --- | --- | ---: | ---: | ---: | ---: |',
              *[f'| {p["variant"]} | {p["policy"]} | {p["true_positive"]} | {p["false_positive"]} | '
@@ -319,8 +501,20 @@ def main():
     parser.add_argument('--max-development-rows', type=int, default=30000, help='0 explicitly uses all development rows.')
     parser.add_argument('--folds', type=int, default=5)
     parser.add_argument('--threads', type=int, default=2)
-    parser.add_argument('--max-iter', type=int, default=150)
-    parser.add_argument('--lgbm-estimators', type=int, default=200)
+    parser.add_argument('--max-iter', type=int, default=150,
+                        help='HGB iteration ceiling. Raise it with --patience so early stopping decides.')
+    parser.add_argument('--lgbm-estimators', type=int, default=200,
+                        help='LightGBM tree ceiling. Raise it with --patience so early stopping decides.')
+    parser.add_argument('--learning-rate', type=float,
+                        help='Shared HGB/LightGBM learning rate. Default keeps the originals (0.1 / 0.05).')
+    parser.add_argument('--patience', type=int,
+                        help='Early-stopping rounds on a 10%% inner split of each training fold. '
+                             'Default keeps the original HGB auto-stopping and fixed LightGBM budget.')
+    parser.add_argument('--stages', nargs='+', choices=STAGES, default=LEGACY_STAGES,
+                        help='Cumulative feature stages to compare. ext adds row-local application '
+                             'features; previous needs previous_application.csv in the archive.')
+    parser.add_argument('--bootstrap', type=int, default=0,
+                        help='Paired stratified bootstrap replicates per contrast (e.g. 500); 0 skips it.')
     parser.add_argument('--output', type=Path)
     parser.add_argument('--resume', action='store_true', help='Resume verified fold checkpoints in --output; reject changed inputs/code/configuration.')
     run(parser.parse_args())

@@ -1,0 +1,23 @@
+{
+  "scoped_rows": 1131338,
+  "excluded_rows": 0,
+  "exclusion_reasons_nonexclusive": {
+    "unknown_or_nonfinite_decision_day": 0,
+    "future_decision_day": 0
+  },
+  "time_boundary": "application day 0; decision dates <= 0",
+  "availability_limit": "Supplied snapshot dates are screened; source provenance is not independently verified.",
+  "unused_fields": "Scheduled due/termination dates are not used.",
+  "amounts_masked": {
+    "AMT_APPLICATION": 0,
+    "AMT_CREDIT": 0,
+    "AMT_ANNUITY": 0,
+    "CNT_PAYMENT": 0
+  },
+  "unknown_status_rows": 0,
+  "eligible_rows": 1131338,
+  "applicants_with_eligible_history": 232834,
+  "source_rows": 1670214,
+  "read_chunk_rows": 250000,
+  "selected_applicants_without_eligible_history": 13174
+}

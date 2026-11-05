@@ -1,15 +1,17 @@
 # Home Credit Default Risk
 
-An application-table credit-risk study using **307,511 labeled applications**. The project compares three classifiers, selects a decision cutoff from development predictions, and examines calibration and train/test distribution drift.
+A credit-risk study using **307,511 labeled applications**, with application-table baselines and matched historical-feature experiments. It compares ranking, probability quality, operating-point tradeoffs and runtime, and examines calibration and train/test distribution drift.
 
 ## TL;DR
 
-- **Model ranking:** histogram gradient boosting reached **0.7605 mean cross-validation ROC-AUC** and **0.7654 random-holdout ROC-AUC**, ahead of the configured logistic regression and random forest baselines.
+- **October 4 model ranking:** histogram gradient boosting reached **0.7605 mean cross-validation ROC-AUC** and **0.7654 random-holdout ROC-AUC**, ahead of the configured logistic regression and random forest baselines.
 - **Cutoff tradeoff:** selecting **0.0844** from development predictions raises reused-holdout recall from **1.85% to 67.19%**, while precision falls from **63.45% to 17.69%**. This is an error tradeoff; lending profit has not been measured.
 - **Monitoring:** score PSI is **0.00384**, yet some input distributions shift substantially. A stable score distribution does not establish stable calibration or predictive performance.
-- **Full-development follow-up:** `hgb_application_bureau_installments` reached **0.7734 mean fold AUC** and **0.2605 OOF AP** on matched development folds. This uses previously inspected development data; the original holdout was not scored. See [the experiment ledger](EXPERIMENTS.md#full-development-staged-follow-up) for all variants and precision/recall tradeoffs.
+- **October 15 development follow-up:** `hgb_application_bureau_installments` reached **0.7734 mean fold AUC** and **0.2605 OOF AP** on matched development folds. This uses previously inspected development data; the original holdout was not scored. See [the experiment ledger](EXPERIMENTS.md#full-development-staged-follow-up) for all variants and precision/recall tradeoffs.
 
 [History follow-up](reports/2026-10-15_01_history-development/2026-10-15_02_report.md) · [Technical report](reports/2026-10-04_03_home-credit/2026-10-04_02_report.md) · [PDF](reports/2026-10-04_03_home-credit/2026-10-04_03_results.pdf) · [Browser report](reports/2026-10-04_03_home-credit/2026-10-04_01_index.html) · [Experiment ledger](EXPERIMENTS.md) · [Report archive](REPORTS.md)
+
+[November 5 higher-budget results](reports/2026-11-05_04_extended-history/2026-11-05_02_report.md): The November 5 comparison reaches **0.780062 mean fold AUC for HGB and 0.780078 for LightGBM** with the tested history families: effectively tied ranking results in this experiment. LightGBM took 288.5 fit seconds versus HGB's 1,082.3; HGB had slightly higher pooled OOF AP (0.270274 versus 0.269765). Previous-application history improved both algorithms, while the application-feature bundle showed no clear gain. These are previously inspected development results; the holdout remains excluded and independent final evaluation is unresolved.
 
 ## Contents
 
@@ -156,11 +158,48 @@ DYLD_FALLBACK_LIBRARY_PATH="$(python -c 'from pathlib import Path; from importli
 
 Use that fallback only when a trusted compatible runtime exists there. It changes no system setting, and the manifest records the path. Otherwise install the optional dependency/runtime normally in your environment, or omit `--include-lightgbm`. [NoxMoon's reference](https://github.com/NoxMoon/home-credit-default-risk) motivated repayment-delay/shortfall ideas; this independent implementation does not reproduce its leaderboard score.
 
+### Larger budgets, two new feature stages, and paired bootstrap intervals
+
+The October 15 models used ceilings of 150 HGB iterations and 200 LightGBM trees. Reaching a ceiling alone does not establish that additional trees improve validation performance. `src.compare_history` accepts larger budgets to test this with early stopping inside each training fold:
+
+```
+python -m src.compare_history \
+  --archive data/archive/2026-10-04_00_home-credit-default-risk.zip \
+  --max-development-rows 0 --folds 5 --threads 2 --include-lightgbm \
+  --stages application_only application_bureau application_bureau_installments \
+           application_bureau_installments_ext application_bureau_installments_ext_previous \
+  --learning-rate 0.05 --patience 30 --max-iter 1000 --lgbm-estimators 1000
+```
+
+- **Early stopping:** With `--patience`, both algorithms use the same seeded, stratified 10% inner stopping split. During stopping, preprocessing fits only the other 90%. The best observed inner log-loss iteration is selected (excluding HGB's patience tail), then a fresh preprocessor and fixed-length model fit the full outer training fold. Outer validation is excluded throughout. This mode requires scikit-learn ≥1.7 for [explicit HGB validation inputs](https://scikit-learn.org/stable/whats_new/v1.7.html). Without `--patience`, the legacy fits are retained. Changed stopping or learning-rate settings reject the original bureau-run cache.
+- **`ext` stage:** `src/application.py` adds row-local application features: the mean, min, max, std and product of the external scores, how many of them are known, employed/age days, goods/credit, and income per family member. They are kept out of `src/train.py`, so the published benchmark and its code hash are unchanged.
+- **`previous` stage:** `src/previous.py` aggregates `previous_application.csv`: status counts, refusal fraction, refusals and applications in the last 365 days, time since the last decision, approval and refusal, approved credit and annuity sums, the credit/requested ratio and the mean term. Records need a finite decision day ≤ 0. Scheduled due and termination dates, and their 365243 sentinels, are not used.
+- **`--bootstrap N`:** Optional paired applicant resampling within each label saves conditional percentile intervals for pooled OOF ΔAUC and ΔAP. These condition on fixed scores and prevalence; they omit refitting variance, overlapping-fold dependence, model selection and population shift. They are not generalization confidence intervals or significance tests. Negative comparisons remain in the output.
+- **Iteration diagnostics:** Per-fold metrics distinguish search rounds, selected length and actual refit iterations. Comparison tables include mean search/refit iterations and the number of folds reaching their search budget. Training times include both inner selection and full-fold refitting.
+
+These are development-fold experiments. As before, the original holdout is excluded.
+
+### Audit saved predictions without retraining
+
+```bash
+python -m src.audit_oof \
+  --source outputs/2026-11-05_02_inner-history \
+  --output reports/2026-11-05_04_oof-audit --repetitions 1000
+```
+
+This separate audit checks source prediction/cohort hashes, exact assignments, complete variant/fold coverage, and recomputed per-fold and pooled metrics before analysis. It resamples the same applicants for both models within each **fold and label**, retaining each stratum's size. A fixed seed and canonical applicant order make results reproducible after CSV reordering. Defaults compare application-only HGB with HGB plus bureau/installments; select other saved variants with `--baseline` and `--candidate`.
+
+Aggregate-only outputs include paired AUC/AP percentile intervals, fixed equal-width calibration bins pooled and by fold (including empty bins), Brier/log loss, source/code hashes and package versions. Existing output folders are rejected. The audit reads no holdout/test data and fits no calibrator or cutoff. Its conditional intervals have the same limitations described above; artifact consistency does not independently prove how the original models were trained.
+
+The [completed audit of the October 15 predictions](reports/2026-11-05_03_original-history-audit/2026-11-05_02_report.md) is available without raw data. To reproduce the November experiment's numerical environment, install `requirements-experiment.txt` in a fresh Python 3.13 environment; the manifest also records the process-local native runtime path. Unit tests use synthetic fixtures and run in the included software-check workflow without competition data.
+
 ## Repository structure
 
 ```text
-src/                 Training, monitoring, bureau ablation, data download, artifact naming
-tests/               Preprocessing, monitoring, bureau boundary and matched-fold checks
+src/                 Training, monitoring, history features (bureau, installments, previous
+                     applications, extended application), staged comparisons, artifact naming
+tests/               Preprocessing, monitoring, history-feature boundaries, early stopping,
+                     bootstrap and matched-fold checks
 reports/             Dated reports, figures, compact tables, source manifests
 outputs/             Local-only full predictions and fitted models
 data/raw/            Local-only competition CSV inputs
@@ -180,7 +219,7 @@ This is a reproducible application-table baseline with diagnostic extensions. It
 - External-score provenance and predictor availability at application time require further review.
 - SHAP uses 100 development rows; permutation importance uses 500 development rows in sample. Neither is causal, and correlated predictors affect interpretation.
 - PSI flags use simulated feature-wise null estimates without multiple-testing correction. There are no test labels to check test calibration or AUC.
-- The published October 4 benchmark has no historical features. Bureau/installment and LightGBM comparisons are separate development experiments; other historical families, hyperparameter search and fitted recalibration remain untested.
+- The published October 4 benchmark has no historical features. The dated development experiments include bureau, installments, an application-feature bundle and previous applications. Other historical tables, broad hyperparameter searches and fitted recalibration remain untested.
 
 Assess paired changes and operating-point precision/recall before retaining added complexity, then seek independent final evaluation. [The first-place solution](https://www.kaggle.com/competitions/home-credit-default-risk/writeups/home-aloan-1st-place-solution) motivates historical features; it does not establish a transferable gain for this implementation.
 
@@ -189,4 +228,4 @@ Assess paired changes and operating-point precision/recall before retaining adde
 - [William Koehrsen: Start Here - A Gentle Introduction](https://www.kaggle.com/code/willkoehrsen/start-here-a-gentle-introduction): exploratory analysis, anomalies, and baseline comparisons.
 
 
-Saved results are from October 4, 2026. External sources are methodological references; their reported performance is not a controlled comparison with this project.
+Saved results from October 4 through November 5, 2026 are dated in the experiment ledger. External sources are methodological references; their reported performance is not a controlled comparison with this project.
