@@ -1,0 +1,10 @@
+# Exact numerical packages used for the November 5 development experiment.
+# Python 3.13. Does not include optional SHAP or dataset-download tooling.
+numpy==2.5.2
+pandas==3.0.6
+scikit-learn==1.9.1
+scipy==1.18.1
+joblib==1.6.0
+threadpoolctl==3.7.0
+lightgbm==4.7.0
+matplotlib==3.11.1

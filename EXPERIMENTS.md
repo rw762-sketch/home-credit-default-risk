@@ -22,12 +22,12 @@ All candidates share five development folds and the same features. The model-fam
 
 ## Untested hypotheses
 
-1. Test additional historical feature families separately under the same development protocol.
+1. Test previous-application history without the neutral application-feature bundle, and test other historical tables separately.
 2. Assess whether gains persist under a bounded, prespecified tuning protocol; the fixed LightGBM comparison is measured below.
 3. Evaluate fold-fitted recalibration and other stated cutoff objectives.
 4. Freeze the selected pipeline and obtain defensible independent evaluation data.
 
-These are proposals, not achieved gains. Bureau/installment and fixed LightGBM comparisons are measured below. Hyperparameter search, stacking and leaderboard evaluation remain unreported.
+These are proposals, not achieved gains. Measured history-feature and fixed-budget/inner-stopping comparisons are dated below. Broad hyperparameter search, stacking and leaderboard evaluation remain unreported.
 
 ## October 14, 2026: bounded bureau feature ablation
 
@@ -116,10 +116,34 @@ Artifacts: local Git-ignored `outputs/2026-10-14_03_bureau-full-development/` an
 
 Published compact evidence for the full-development follow-up is in the [tracked report](reports/2026-10-15_01_history-development/2026-10-15_02_report.md); row-level outputs remain local.
 
-## Evidence
+## November 5, 2026: validation improvements and saved-score audit
+
+The proposed `uncapped-history-stages` branch at `9a38fb3` was reviewed before integration. Its new feature families and larger budgets are experiments, not established gains. The review fixed missing artifact-name registrations, isolated inner stopping preprocessing for both algorithms, and added full outer-training refits at the selected iteration count. The legacy no-patience path remains available. HGB selection excludes its patience tail; recorded actual refit iterations, selected length and search rounds are separate. Changed feature/stopping code invalidates checkpoints; changed HGB settings reject the original bureau cache.
+
+Application extensions bundle external-score summaries **and** employment/age, goods/credit and per-family-member income ratios. Any stage gain belongs to that bundle; it cannot be attributed to external-score summaries alone. Previous-application amounts are nominal approved amounts, not current debt obligations. Decision dates are screened at day 0; source availability still requires independent provenance review.
+
+A separate read of the source decision-day column found **zero day-zero decisions in all 1,670,214 previous applications**, and zero future decisions scoped to the 246,008 development IDs. Therefore changing the decision boundary from ≤0 to <0 cannot change this dataset's previous-application aggregates. This empirical equivalence does not establish within-day availability in a different dataset. [Aggregate coverage audit](reports/2026-11-05_03_original-history-audit/2026-11-05_43_previous-audit.json).
+
+An aggregate-only [saved-score audit](reports/2026-11-05_03_original-history-audit/2026-11-05_02_report.md) recomputed the October 15 per-fold/pooled metrics after checking prediction/cohort hashes and exact assignments. With 1,000 paired applicant resamples within each fold/label stratum (seed 42), application-only HGB versus HGB with bureau/installments has pooled OOF AUC change **+0.012903**, conditional percentile interval **[+0.011512, +0.014155]**; AP change **+0.017827**, interval **[+0.015098, +0.020646]**. Fixed-width calibration tables, Brier/log loss and source/code/version manifests accompany it.
+
+These are conditional resampling diagnostics on already inspected fitted scores, **not generalization confidence intervals or significance tests**. They exclude refitting, overlapping-training-fold dependence, selection and population shift. Pooled OOF AUC is distinct from mean fold AUC, the model-selection metric. No new performance gain, fresh validation, calibrator, tuned cutoff, final refit or submission is implied by this audit.
+
+The exact-package snapshot is `requirements-experiment.txt`; `requirements.txt` remains the bounded installation interface. Local software checks include the LightGBM runtime, future-record exclusion, inner-preprocessor isolation/full-fold refit, checkpoint boundaries, exact ties, deterministic paired resampling, and weighted-score agreement with explicit scikit-learn resampling. The full higher-budget five-stage development experiment is recorded separately after completion; the original holdout is excluded.
+
+## Evidence links
 
 - [Model comparison table](reports/2026-10-04_03_home-credit/data/2026-10-04_06_model-comparison.csv)
 - [Cutoff comparison table](reports/2026-10-04_03_home-credit/data/2026-10-04_24_threshold-comparison.csv)
 - [Calibration table](reports/2026-10-04_03_home-credit/data/2026-10-04_26_calibration.csv)
 - [Drift table](reports/2026-10-04_03_home-credit/data/2026-10-04_28_drift.csv)
 - [Full methodology and interpretation](reports/2026-10-04_03_home-credit/2026-10-04_02_report.md)
+
+## November 5: measured higher-budget staged comparison
+
+The November 5 comparison reaches **0.780062 mean fold AUC for HGB and 0.780078 for LightGBM** with the tested history families: effectively tied ranking results in this experiment. LightGBM took 288.5 fit seconds versus HGB's 1,082.3; HGB had slightly higher pooled OOF AP (0.270274 versus 0.269765). Previous-application history improved both algorithms, while the application-feature bundle showed no clear gain. These are previously inspected development results; the holdout remains excluded and independent final evaluation is unresolved.
+
+[Full results and conditional audits](reports/2026-11-05_04_extended-history/2026-11-05_02_report.md).
+
+The application-feature bundle changed mean fold AUC by -0.000229 (HGB) and -0.000523 (LightGBM); its conditional pooled AUC/AP intervals all include zero. Adding previous-application history then changed mean fold AUC by +0.003811 and +0.003869, respectively, positive on all five folds for each algorithm. The paired pooled AUC intervals were [+0.002981, +0.004634] for HGB and [+0.003105, +0.004687] for LightGBM. These fixed-score resampling intervals do not establish generalization or statistical significance.
+
+Decision: retain previous-application history as a research candidate; do not claim the application-feature bundle improved performance. Test previous history without that bundle before choosing the simplest final feature set. The algorithms' tiny ranking difference does not support a clear winner: LightGBM is faster and marginally better at top-5% capacity, while HGB has higher pooled AP and top-10% precision here. All 50 searches stopped below 1,000 rounds; the full run took 6,018.7 seconds, with the original holdout excluded.

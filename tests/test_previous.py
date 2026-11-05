@@ -76,6 +76,15 @@ class PreviousApplicationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'unique'):
             aggregate_previous(duplicate)
 
+    def test_future_duplicate_and_invalid_keys_do_not_change_past_features(self):
+        raw = previous_fixture()
+        future = raw.iloc[[0]].copy().assign(DAYS_DECISION=1.)
+        unknown = raw.iloc[[1]].copy().assign(DAYS_DECISION=np.nan, SK_ID_CURR=np.nan)
+        expected, _ = aggregate_previous(raw)
+        actual, audit = aggregate_previous(pd.concat([raw, future, unknown], ignore_index=True))
+        pd.testing.assert_frame_equal(expected, actual, check_dtype=False)
+        self.assertEqual(audit['excluded_rows'], 2)
+
     def test_join_preserves_rows_and_marks_absent_history(self):
         aggregates, _ = aggregate_previous(previous_fixture())
         apps = pd.DataFrame({'SK_ID_CURR': [30, 20, 10], 'TARGET': [1, 0, 1]}, index=[7, 2, 4])

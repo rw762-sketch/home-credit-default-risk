@@ -1,0 +1,26 @@
+{
+  "boundary": "Previously inspected development OOF predictions only. Bootstrap percentile intervals condition on the saved fitted scores and preserve each fold/class size. They omit model refitting, overlapping training-fold dependence, model selection and population shift; they are not generalization confidence intervals or significance tests. AUC/AP point estimates here are pooled OOF, distinct from the benchmark selection metric of mean fold AUC. Calibration is descriptive; no calibrator or cutoff is fitted. No holdout, test data or raw applicant features are read.",
+  "rows": 246008,
+  "positives": 19860,
+  "source_files": {
+    "manifest.json": "b8daba1b86bc8450d28407e3e27bfcdab0a0c81ecc7f8083fc64ec1b2dccc712",
+    "metrics.json": "17f2fd6dae7f4505195e9ee41493687410784109305cfa33dc1938863f37465c",
+    "fold_assignments.csv": "93045361a268833a0b9b7a618343f862da49f5f9929c4b3352efe5656504b13e",
+    "development_predictions.csv": "f26d1285026298fac8193b0105498b4a53266e920ac6ec7e006b9eb498c55bc7",
+    "fold_metrics.csv": "1989ee692f3a236f3409fcdcf021401d1c791cd523d33fa2470567746716c306"
+  },
+  "source_run": "2026-10-15_01_history-full-development",
+  "audit_code_sha256": "9ea7fd1b88f93557ac478179b14819aafce5a34301cf37c69301cf6afa0c929a",
+  "metric_code_sha256": "29b5bc5c59c3ead10f62cf198560809f88ad9912762537e313c11e5874536429",
+  "validation_code_sha256": "59b62b67176533dfed84e402ed75172e80bc55a1f718853c2331ee5771df0b5f",
+  "versions": {
+    "numpy": "2.5.2",
+    "pandas": "3.0.6",
+    "scikit-learn": "1.9.1"
+  },
+  "baseline": "hgb_application_only",
+  "candidate": "hgb_application_bureau_installments",
+  "repetitions": 1000,
+  "seed": 42,
+  "binning": "10 fixed equal-width bins; last bin includes probability 1"
+}
