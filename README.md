@@ -156,11 +156,35 @@ DYLD_FALLBACK_LIBRARY_PATH="$(python -c 'from pathlib import Path; from importli
 
 Use that fallback only when a trusted compatible runtime exists there. It changes no system setting, and the manifest records the path. Otherwise install the optional dependency/runtime normally in your environment, or omit `--include-lightgbm`. [NoxMoon's reference](https://github.com/NoxMoon/home-credit-default-risk) motivated repayment-delay/shortfall ideas; this independent implementation does not reproduce its leaderboard score.
 
+### Uncapped models, two new feature stages, and paired bootstrap intervals
+
+In the October 15 run, HGB reached its 150-iteration ceiling in every fold of the best variant, and LightGBM always used all 200 trees. Both models were still improving when they stopped, so those results compare training budgets as much as features or algorithms. `src.compare_history` now accepts larger budgets with early stopping done inside each training fold:
+
+```
+python -m src.compare_history \
+  --archive data/archive/2026-10-04_00_home-credit-default-risk.zip \
+  --max-development-rows 0 --folds 5 --threads 2 --include-lightgbm \
+  --stages application_only application_bureau application_bureau_installments \
+           application_bureau_installments_ext application_bureau_installments_ext_previous \
+  --learning-rate 0.03 --patience 100 --max-iter 3000 --lgbm-estimators 3000 \
+  --bootstrap 500
+```
+
+- **Early stopping:** `--patience` stops each model on a 10% inner split of its training fold. HGB uses its own internal split; LightGBM uses a stratified split, with preprocessing fitted on the inner-training rows only. The outer validation fold is never used for stopping. Without `--patience`, the original behaviour is reproduced exactly. With `--patience`, the bureau-run cache is rejected, because its predictions came from the original settings.
+- **`ext` stage:** `src/application.py` adds row-local application features: the mean, min, max, std and product of the external scores, how many of them are known, employed/age days, goods/credit, and income per family member. They are kept out of `src/train.py`, so the published benchmark and its code hash are unchanged.
+- **`previous` stage:** `src/previous.py` aggregates `previous_application.csv`: status counts, refusal fraction, refusals and applications in the last 365 days, time since the last decision, approval and refusal, approved credit and annuity sums, the credit/requested ratio and the mean term. Records need a finite decision day ≤ 0. Scheduled due and termination dates, and their 365243 sentinels, are not used.
+- **`--bootstrap N`:** For each paired contrast, applicants are resampled within each label, and both models are rescored on the same resample. The run saves 95% percentile intervals for ΔAUC and ΔAP in `bootstrap_deltas.csv` and in the report. These intervals cover sampling of applicants, not refitting variance.
+- **Mean iterations:** The report now shows mean iterations per variant, so a run that hits its ceiling is visible.
+
+These are development-fold experiments. As before, the original holdout is excluded.
+
 ## Repository structure
 
 ```text
-src/                 Training, monitoring, bureau ablation, data download, artifact naming
-tests/               Preprocessing, monitoring, bureau boundary and matched-fold checks
+src/                 Training, monitoring, history features (bureau, installments, previous
+                     applications, extended application), staged comparisons, artifact naming
+tests/               Preprocessing, monitoring, history-feature boundaries, early stopping,
+                     bootstrap and matched-fold checks
 reports/             Dated reports, figures, compact tables, source manifests
 outputs/             Local-only full predictions and fitted models
 data/raw/            Local-only competition CSV inputs

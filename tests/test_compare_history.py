@@ -13,8 +13,8 @@ import pandas as pd
 
 from src.artifacts import artifact_path
 from src.compare_bureau import probability_metrics, run as run_bureau
-from src.compare_history import (cached_bureau_run, load_checkpoint, operating_points,
-                                 run, save_checkpoint)
+from src.compare_history import (STAGES, cached_bureau_run, fit_fold, load_checkpoint,
+                                 operating_points, paired_bootstrap, run, save_checkpoint)
 
 
 class HistoryComparisonTests(unittest.TestCase):
@@ -109,6 +109,99 @@ class HistoryComparisonTests(unittest.TestCase):
             args.lgbm_estimators = 4
             with redirect_stdout(StringIO()), self.assertRaisesRegex(ValueError, 'Checkpoint'):
                 run(args)
+
+    def test_bootstrap_is_zero_for_identical_models_and_positive_for_a_clear_gain(self):
+        rng = np.random.default_rng(0)
+        labels = np.tile([0, 0, 0, 1], 100)
+        baseline = rng.uniform(size=len(labels))
+        same = paired_bootstrap(labels, baseline, baseline, 30)
+        self.assertEqual((same['auc_delta'], same['auc_ci_low'], same['auc_ci_high']), (0, 0, 0))
+        candidate = labels + rng.uniform(0, .5, len(labels))
+        better = paired_bootstrap(labels, baseline, candidate, 30)
+        self.assertGreater(better['auc_ci_low'], 0)
+        self.assertEqual(better['auc_positive_fraction'], 1)
+        self.assertEqual(better, paired_bootstrap(labels, baseline, candidate, 30))
+        with self.assertRaisesRegex(ValueError, 'both classes'):
+            paired_bootstrap(np.zeros(5), baseline[:5], baseline[:5], 3)
+
+    def test_hgb_inner_early_stopping_stops_before_the_ceiling(self):
+        rng = np.random.default_rng(0)
+        x = pd.DataFrame({'noise': rng.normal(size=400)})
+        y = rng.integers(0, 2, 400)
+        params = {'max_iter': 500, 'max_leaf_nodes': 15, 'l2_regularization': 1, 'random_state': 42,
+                  'early_stopping': True, 'n_iter_no_change': 3, 'validation_fraction': .1}
+        model, iterations = fit_fold(x, y, 'hgb', params, None, 3, None, 42)
+        self.assertLess(iterations, 500)
+        self.assertTrue(np.isfinite(model.predict_proba(x)).all())
+
+    def test_lightgbm_inner_early_stopping_uses_training_fold_only(self):
+        try:
+            from lightgbm import LGBMClassifier
+        except (ImportError, OSError):
+            self.skipTest('Optional LightGBM/native runtime unavailable in this process.')
+        rng = np.random.default_rng(0)
+        x = pd.DataFrame({'noise': rng.normal(size=400)})
+        y = rng.integers(0, 2, 400)
+        params = {'n_estimators': 300, 'learning_rate': .1, 'num_leaves': 7, 'n_jobs': 1,
+                  'verbosity': -1, 'deterministic': True, 'force_col_wise': True, 'random_state': 42}
+        model, iterations = fit_fold(x, y, 'lgbm', None, params, 5, LGBMClassifier, 42)
+        self.assertLess(iterations, 300)
+        self.assertTrue(np.isfinite(model.predict_proba(x)).all())
+
+    def test_all_stages_with_early_stopping_and_bootstrap(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            rng = np.random.default_rng(0)
+            frame = pd.DataFrame({'SK_ID_CURR': np.arange(1, 201), 'TARGET': np.tile([0, 0, 0, 1], 50),
+                                  'amount': np.arange(200.), 'EXT_SOURCE_2': rng.uniform(size=200)})
+            train = root/'train.csv'
+            frame.to_csv(train, index=False)
+            bureau = pd.DataFrame({'SK_ID_CURR': np.arange(1, 151), 'SK_ID_BUREAU': np.arange(1001, 1151),
+                                   'DAYS_CREDIT': -100, 'DAYS_CREDIT_UPDATE': -2, 'CREDIT_ACTIVE': 'Active',
+                                   'AMT_CREDIT_SUM': 100., 'AMT_CREDIT_SUM_DEBT': 20., 'AMT_CREDIT_SUM_OVERDUE': 0.})
+            payments = pd.DataFrame({'SK_ID_CURR': np.arange(1, 151), 'SK_ID_PREV': np.arange(301, 451),
+                                     'NUM_INSTALMENT_NUMBER': 1, 'NUM_INSTALMENT_VERSION': 1,
+                                     'DAYS_INSTALMENT': -10., 'DAYS_ENTRY_PAYMENT': -5.,
+                                     'AMT_INSTALMENT': 50., 'AMT_PAYMENT': 20.})
+            previous = pd.DataFrame({'SK_ID_PREV': np.arange(501, 641), 'SK_ID_CURR': np.arange(1, 141),
+                                     'NAME_CONTRACT_STATUS': np.tile(['Approved', 'Refused'], 70),
+                                     'DAYS_DECISION': -30., 'AMT_APPLICATION': 100., 'AMT_CREDIT': 90.,
+                                     'AMT_ANNUITY': 9., 'CNT_PAYMENT': 12.})
+            archive = root/'data.zip'
+            with zipfile.ZipFile(archive, 'w') as z:
+                z.writestr('bureau.csv', bureau.to_csv(index=False))
+                z.writestr('installments_payments.csv', payments.to_csv(index=False))
+                z.writestr('previous_application.csv', previous.to_csv(index=False))
+            args = argparse.Namespace(train=train, archive=archive, reuse_bureau_run=None,
+                                      output=root/'2026-11-05_01_history', folds=2, max_development_rows=100,
+                                      max_iter=400, lgbm_estimators=3, threads=1, include_lightgbm=False,
+                                      stages=list(STAGES), learning_rate=.2, patience=3, bootstrap=10)
+            with redirect_stdout(StringIO()):
+                out = run(args)
+            comparison = pd.read_csv(artifact_path(out, 'comparison.csv'))
+            self.assertEqual(comparison.variant.tolist(), [f'hgb_{s}' for s in STAGES])
+            self.assertTrue((comparison.mean_iterations < 400).all())
+            self.assertEqual(len(pd.read_csv(artifact_path(out, 'bootstrap_deltas.csv'))), len(STAGES) - 1)
+            self.assertEqual(len(pd.read_csv(artifact_path(out, 'paired_deltas.csv'))), 2 * (len(STAGES) - 1))
+            schema = json.loads(artifact_path(out, 'feature_schema.json').read_text())
+            last = schema['application_bureau_installments_ext_previous']
+            self.assertIn('PREV_REFUSED_COUNT', last)
+            self.assertIn('EXT_SOURCE_MEAN', last)
+            self.assertNotIn('PREV_REFUSED_COUNT', schema['application_bureau_installments_ext'])
+            self.assertTrue(artifact_path(out, 'previous_audit.json').exists())
+            metrics = json.loads(artifact_path(out, 'metrics.json').read_text())
+            self.assertEqual(metrics['hgb_parameters']['n_iter_no_change'], 3)
+            self.assertFalse(any(out.glob('*holdout*')))
+            assignments = pd.read_csv(artifact_path(out, 'fold_assignments.csv'))
+            baseline = argparse.Namespace(train=train, bureau=archive, output=root/'2026-11-05_02_bureau',
+                                          folds=2, max_development_rows=100, max_iter=3, threads=1)
+            with redirect_stdout(StringIO()):
+                run_bureau(baseline)
+            cached_bureau_run(baseline.output, assignments, train, archive, 3)  # Original settings reuse.
+            changed = {'max_iter': 3, 'max_leaf_nodes': 15, 'l2_regularization': 1, 'random_state': 42,
+                       'early_stopping': True, 'n_iter_no_change': 3, 'validation_fraction': .1}
+            with self.assertRaisesRegex(ValueError, 'configuration'):
+                cached_bureau_run(baseline.output, assignments, train, archive, 3, changed)
 
     def test_lightgbm_available_and_uses_explicit_bounded_threads(self):
         try:
