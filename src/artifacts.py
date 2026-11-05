@@ -29,6 +29,9 @@ ORDER = {
     'paired_deltas.csv': 41,
     'checkpoint.npz': 42,
     'previous_audit.json': 43, 'bootstrap_deltas.csv': 44,
+    'reason_codes.csv': 45, 'reason_summary.csv': 46,
+    'policy_comparison.csv': 47, 'profit_curve.csv': 48,
+    'sensitivity.csv': 49, 'expected_loss_by_band.csv': 50,
 }
 
 

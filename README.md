@@ -217,13 +217,44 @@ Aggregate-only outputs include paired AUC/AP percentile intervals, fixed equal-w
 
 The [completed audit of the October 15 predictions](reports/2026-11-05_03_original-history-audit/2026-11-05_02_report.md) is available without raw data. To reproduce the November experiment's numerical environment, install `requirements-experiment.txt` in a fresh Python 3.13 environment; the manifest also records the process-local native runtime path. Unit tests use synthetic fixtures and run in the included software-check workflow without competition data.
 
+## From scores to decisions
+
+These three commands move the project from a validated model to a lending workflow: one independent score, a decision rule tied to loan economics, and a reason for each high-risk score. None of them change any earlier result.
+
+### 1. One frozen, independent score
+
+```bash
+python -m src.submit --archive data/archive/2026-10-04_00_home-credit-default-risk.zip
+```
+
+`src/submit.py` freezes the full-feature stage (application + bureau + installments + extended + previous applications) with the November 5 protocol: LightGBM, learning rate 0.05, up to 1,000 rounds, patience 30 on an inner 10% split. It fits on all 307,511 labeled rows and scores the 48,744 competition-test applicants. Each history aggregate uses only that applicant's own records, so building train and test features together shares no statistics between them. The run saves `submission.csv`, the fitted model, a configuration hash, input/code hashes and the history audits. It does **not** upload anything. Submit the file once with the Kaggle command printed in its report, then record the leaderboard AUC. Submitting repeatedly and keeping the best score would turn the leaderboard into another tuning set.
+
+### 2. Expected loss and a cost-based cutoff
+
+```bash
+python -m src.decision --source outputs/<history-comparison run> --margin 0.10 --lgd 0.45
+```
+
+`src/decision.py` turns saved out-of-fold probabilities into approve/decline decisions and money. Every approved loan has exposure EAD = `AMT_CREDIT`. A repaid loan earns `margin × EAD`, and a loan with repayment difficulty loses `LGD × EAD`. Approving applicant *i* has positive expected value when
+
+```text
+(1 − PD) × margin − PD × LGD > 0   ⇔   PD < margin / (margin + LGD)
+```
+
+So the cost-based cutoff needs no labels, and EAD cancels out. The report compares approving everyone, PD < 0.5, the F2 cutoff, rejecting the riskiest 5/10/20%, the cost-based cutoff, and the best cutoff found with hindsight (an upper bound, not a policy). It saves realized and model-expected profit, a profit curve, a margin × LGD sensitivity grid, and predicted vs. realized loss by score decile. Margin and LGD are assumptions: the default LGD of 45% is the Basel foundation-IRB value for senior unsecured exposures, and Home Credit's real pricing and recoveries are not in the data. TARGET flags payment difficulty, not a written-off loss.
+
+### 3. Reason codes for each applicant
+
+`src.submit` saves the top three risk-raising inputs for every scored applicant by default (`--reasons 3`). Pass `--reason-cutoff 0.18` to keep only applicants above a decline cutoff. `src/reasons.py` uses LightGBM's exact tree contributions (TreeSHAP). The applicant's log-odds score splits into a baseline plus one contribution per input column, and one-hot indicators are summed back to their original column. Each run checks that the contributions add up to the model's score. Every reason row gives the feature, its family (bureau, installments, previous applications, external scores, application), the applicant's own value and its contribution in log-odds. `reason_summary.csv` counts how often each input is the main reason. These explain the model's score; they don't show what caused a default.
+
 ## Repository structure
 
 ```text
 src/                 Training, monitoring, history features (bureau, installments, previous
-                     applications, extended application), staged comparisons, artifact naming
+                     applications, extended application), staged comparisons, frozen
+                     submission, decision/expected-loss layer, reason codes, artifact naming
 tests/               Preprocessing, monitoring, history-feature boundaries, early stopping,
-                     bootstrap and matched-fold checks
+                     bootstrap, matched-fold, submission, decision and reason-code checks
 reports/             Dated reports, figures, compact tables, source manifests
 outputs/             Local-only full predictions and fitted models
 data/raw/            Local-only competition CSV inputs
@@ -241,9 +272,11 @@ This is a reproducible application-table baseline plus matched development exper
 
 Next steps, in order:
 
-1. Freeze the full-feature pipeline and score it once on independent data, for example a Kaggle late submission.
-2. Test the remaining history tables: `bureau_balance`, `POS_CASH_balance` and `credit_card_balance`.
-3. Test previous-application history without the external-score / ratio bundle, which showed no gain.
+1. Run `src.submit` and submit the frozen pipeline once to Kaggle, for an independent score. The code is in place; the score is not yet recorded.
+2. Run `src.decision` on the November 5 predictions and publish the policy comparison.
+3. Test the remaining history tables: `bureau_balance`, `POS_CASH_balance` and `credit_card_balance`.
+4. Test previous-application history without the external-score / ratio bundle, which showed no gain.
+5. Audit fairness: error and approval rates by gender and age band, and checks for proxy features.
 
 - The holdout has been reused. Future model development needs independent final evaluation data.
 - External-score provenance and predictor availability at application time require further review.
