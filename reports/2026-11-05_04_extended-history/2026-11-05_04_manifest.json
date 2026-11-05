@@ -1,0 +1,50 @@
+{
+  "inputs": {
+    "/Users/wuruiyue/gradient boost/data/raw/application_train.csv": "52e96b895b1112e1c853f670e58372719c8441c5ed1c57ac2f7fad559d784f5f",
+    "/Users/wuruiyue/gradient boost/data/archive/2026-10-04_00_home-credit-default-risk.zip": "4e7a243b13f6e3d40f682a9a0cfd59c70910ca6c5a4289f71ca1f25efbd8e3de"
+  },
+  "code": {
+    "compare_history.py": "59b62b67176533dfed84e402ed75172e80bc55a1f718853c2331ee5771df0b5f",
+    "installments.py": "0c0c4ec8e823fff57e7e43c9999c5eba1af950c5378f567daa87de105a129558",
+    "bureau.py": "706581c6daf71361189cfeff92d2f2b1aa9467b5a5084c8a701f1689d062589c",
+    "compare_bureau.py": "29b5bc5c59c3ead10f62cf198560809f88ad9912762537e313c11e5874536429",
+    "train.py": "b29629dd7e3bbd0b0ba632a7e59878aff99c063c429bbbe9b4e11efcc4ab0833",
+    "artifacts.py": "052b5bbdb690bfd69c38fef6430734ac7b18ee9fd8c148af27e68c845b629ea6",
+    "application.py": "743a16fc1a75e04c11123b2f6ecddc733f89d6b0f264bc7ffe367b8125374b0d",
+    "previous.py": "7c4a490c1c4a2a44f4a58930436cbff5710e3de0ac840cec6943176776918840"
+  },
+  "versions": {
+    "numpy": "2.5.2",
+    "pandas": "3.0.6",
+    "scikit-learn": "1.9.1",
+    "threadpoolctl": "3.7.0",
+    "lightgbm": "4.7.0"
+  },
+  "checkpoint_signature": "8af6b3f126ecfd1507a4ae67de0e303e9e8c06d73ad2cc4340881b20411d7d45",
+  "command": {
+    "train": "/Users/wuruiyue/gradient boost/data/raw/application_train.csv",
+    "archive": "/Users/wuruiyue/gradient boost/data/archive/2026-10-04_00_home-credit-default-risk.zip",
+    "reuse_bureau_run": null,
+    "include_lightgbm": true,
+    "max_development_rows": 0,
+    "folds": 5,
+    "threads": 2,
+    "max_iter": 1000,
+    "lgbm_estimators": 1000,
+    "learning_rate": 0.05,
+    "patience": 30,
+    "stages": [
+      "application_only",
+      "application_bureau",
+      "application_bureau_installments",
+      "application_bureau_installments_ext",
+      "application_bureau_installments_ext_previous"
+    ],
+    "bootstrap": 0,
+    "output": "outputs/2026-11-05_02_inner-history",
+    "resume": false
+  },
+  "native_library_fallback": "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sklearn/.dylibs",
+  "fold_assignments_sha256": "93045361a268833a0b9b7a618343f862da49f5f9929c4b3352efe5656504b13e",
+  "predictions_sha256": "4869a54d55fd8ea7ab31f8d764c06e4b1d88ddcdba0e92f9e21ebb0c50c675ca"
+}

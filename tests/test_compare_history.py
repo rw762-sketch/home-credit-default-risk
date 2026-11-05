@@ -116,7 +116,7 @@ class HistoryComparisonTests(unittest.TestCase):
         baseline = rng.uniform(size=len(labels))
         same = paired_bootstrap(labels, baseline, baseline, 30)
         self.assertEqual((same['auc_delta'], same['auc_ci_low'], same['auc_ci_high']), (0, 0, 0))
-        candidate = labels + rng.uniform(0, .5, len(labels))
+        candidate = .6*labels + rng.uniform(0, .4, len(labels))
         better = paired_bootstrap(labels, baseline, candidate, 30)
         self.assertGreater(better['auc_ci_low'], 0)
         self.assertEqual(better['auc_positive_fraction'], 1)
@@ -133,6 +133,32 @@ class HistoryComparisonTests(unittest.TestCase):
         model, iterations = fit_fold(x, y, 'hgb', params, None, 3, None, 42)
         self.assertLess(iterations, 500)
         self.assertTrue(np.isfinite(model.predict_proba(x)).all())
+
+    def test_stopping_preprocessing_is_isolated_then_full_fold_is_refitted(self):
+        from sklearn.model_selection import train_test_split
+        from src.train import pipeline as real_pipeline
+        x = pd.DataFrame({'amount': np.arange(400.)})
+        y = np.tile([0, 1], 200)
+        inner, stop = train_test_split(np.arange(400), test_size=.1, stratify=y, random_state=42)
+        x.loc[stop, 'amount'] = 1e9
+        created = []
+
+        def record_pipeline(*args):
+            model = real_pipeline(*args)
+            created.append(model)
+            return model
+
+        params = {'max_iter': 50, 'random_state': 42, 'max_leaf_nodes': 7}
+        with patch('src.compare_history.pipeline', side_effect=record_pipeline):
+            fitted, iterations = fit_fold(x, y, 'hgb', params, None, 3, None, 42)
+        self.assertEqual(len(created), 2)
+        stopping_imputer = created[0]['preprocess'].named_transformers_['numeric']['impute']
+        final_imputer = fitted['preprocess'].named_transformers_['numeric']['impute']
+        self.assertEqual(stopping_imputer.statistics_[0], x.iloc[inner].amount.median())
+        self.assertEqual(final_imputer.statistics_[0], x.amount.median())
+        self.assertNotEqual(stopping_imputer.statistics_[0], final_imputer.statistics_[0])
+        self.assertFalse(fitted['model'].early_stopping)
+        self.assertEqual(fitted['model'].n_iter_, iterations)
 
     def test_lightgbm_inner_early_stopping_uses_training_fold_only(self):
         try:

@@ -33,30 +33,44 @@ INNER_VALIDATION_FRACTION = .1
 def fit_fold(x, y, algorithm, hgb_params, lgbm_params, patience, lightgbm_class, seed):
     """Fit one outer training fold; early stopping never sees the outer validation fold.
 
-    HGB uses its own internal random validation split. With ``patience`` set,
-    LightGBM stops on a stratified inner split of the training fold, and its
-    preprocessing is fitted on the inner-training rows only. Without patience,
-    LightGBM uses its full fixed tree budget (the original behaviour).
+    With patience set, both algorithms use the same stratified inner split.
+    Preprocessing is learned on inner-training rows only during stopping.
+    Then preprocessing and a fixed-length model are refitted on the full outer
+    training fold. The legacy no-patience path preserves the original fits.
     """
     y = np.asarray(y)
-    if algorithm == 'hgb':
-        model = pipeline(x, HistGradientBoostingClassifier(**hgb_params)).fit(x, y)
-        return model, int(model['model'].n_iter_)
-    model = pipeline(x, lightgbm_class(**lgbm_params))
+    estimator = (HistGradientBoostingClassifier(**hgb_params) if algorithm == 'hgb'
+                 else lightgbm_class(**lgbm_params))
+    model = pipeline(x, estimator)
     if patience is None:
         model.fit(x, y)
         return model, int(model['model'].n_iter_)
-    from lightgbm import early_stopping
     inner, stop = train_test_split(np.arange(len(y)), test_size=INNER_VALIDATION_FRACTION,
                                    stratify=y, random_state=seed)
     preprocess = model['preprocess']
     x_inner = preprocess.fit_transform(x.iloc[inner])
     x_stop = preprocess.transform(x.iloc[stop])
-    model['model'].fit(x_inner, y[inner], eval_set=[(x_stop, y[stop])],
-                       eval_metric='binary_logloss',
-                       callbacks=[early_stopping(patience, verbose=False)])
-    best = model['model'].best_iteration_
-    return model, int(best if best and best > 0 else model['model'].n_iter_)
+    if algorithm == 'hgb':
+        estimator.set_params(early_stopping=True, n_iter_no_change=patience, scoring='loss')
+        estimator.fit(x_inner, y[inner], X_val=x_stop, y_val=y[stop])
+        # HGB includes the patience tail in n_iter_; choose the best observed loss.
+        iterations = int(np.argmax(estimator.validation_score_[1:])+1)
+        final_estimator = HistGradientBoostingClassifier(**{
+            **hgb_params, 'max_iter': iterations, 'early_stopping': False})
+        search_iterations = int(estimator.n_iter_)
+    else:
+        from lightgbm import early_stopping, record_evaluation
+        evaluations = {}
+        estimator.fit(x_inner, y[inner], eval_set=[(x_stop, y[stop])],
+                      eval_metric='binary_logloss',
+                      callbacks=[early_stopping(patience, verbose=False), record_evaluation(evaluations)])
+        iterations = int(estimator.best_iteration_ or estimator.n_iter_)
+        search_iterations = len(evaluations['valid_0']['binary_logloss'])
+        final_estimator = lightgbm_class(**{**lgbm_params, 'n_estimators': iterations})
+    final = pipeline(x, final_estimator).fit(x, y)
+    final.audit_search_iterations_ = search_iterations
+    final.audit_selected_iterations_ = iterations
+    return final, int(final['model'].n_iter_)
 
 
 def paired_bootstrap(labels, baseline, candidate, replicates, seed=SEED):
@@ -69,6 +83,12 @@ def paired_bootstrap(labels, baseline, candidate, replicates, seed=SEED):
     labels = np.asarray(labels)
     baseline, candidate = np.asarray(baseline), np.asarray(candidate)
     positives, negatives = np.flatnonzero(labels == 1), np.flatnonzero(labels == 0)
+    if labels.ndim != 1 or baseline.shape != labels.shape or candidate.shape != labels.shape:
+        raise ValueError('Bootstrap labels and probabilities must have identical one-dimensional shapes.')
+    if not np.isin(labels, [0, 1]).all():
+        raise ValueError('Bootstrap needs binary labels and both classes.')
+    if any(not np.isfinite(p).all() or ((p < 0) | (p > 1)).any() for p in [baseline, candidate]):
+        raise ValueError('Bootstrap probabilities must be finite and in [0, 1].')
     if replicates < 1 or not len(positives) or not len(negatives):
         raise ValueError('Bootstrap needs at least one replicate and both classes.')
     rng = np.random.default_rng(seed)
@@ -320,6 +340,10 @@ def run(args):
         saved_assignments = pd.read_csv(artifact_path(out, 'fold_assignments.csv'))
         pd.testing.assert_frame_equal(saved_assignments, assignments, check_dtype=False)
         predictions, fold_rows = load_checkpoint(checkpoint, signature, assignments)
+        expected_names = {f'{algorithm}_{stage}' for algorithm in
+                          (['hgb', 'lgbm'] if args.include_lightgbm else ['hgb']) for stage in stages}
+        if not set(predictions).issubset(expected_names):
+            raise ValueError('Checkpoint contains unexpected variants.')
         print(f'Resuming {len(fold_rows)} verified completed variant/folds.', flush=True)
     else:
         assignments.to_csv(artifact_path(out, 'fold_assignments.csv'), index=False)
@@ -346,6 +370,8 @@ def run(args):
                     row = {'variant': name, 'fold': int(fold), 'training_rows': int(train.sum()),
                            'validation_rows': int(val.sum()), 'cached': False,
                            'iterations': iterations,
+                           'selected_iterations': int(getattr(model, 'audit_selected_iterations_', iterations)),
+                           'search_iterations': int(getattr(model, 'audit_search_iterations_', iterations)),
                            'seconds': round(perf_counter()-tick, 3), **probability_metrics(labels[val], p[val])}
                     fold_rows.append(row)
                     save_checkpoint(checkpoint, signature, predictions, fold_rows)
@@ -358,15 +384,20 @@ def run(args):
             # Save completed variants so a connection interruption loses no results.
             partial = assignments.assign(**predictions)
             partial.to_csv(artifact_path(out, 'development_predictions.csv'), index=False)
+    validate_fold_records(predictions, fold_rows, assignments, complete=True)
     fold_table = pd.DataFrame(fold_rows)
     summary, points = [], []
     for name, p in predictions.items():
         fold_scores = fold_table.loc[fold_table.variant.eq(name)]
         stage = name.split('_', 1)[1]
+        search_iterations = fold_scores.get('search_iterations', fold_scores.iterations).fillna(fold_scores.iterations)
+        ceiling = args.max_iter if name.startswith('hgb_') else args.lgbm_estimators
         summary.append({'variant': name, 'features': variants[stage].shape[1],
                         'mean_fold_auc': float(fold_scores.roc_auc.mean()),
                         'fold_auc_std': float(fold_scores.roc_auc.std(ddof=0)),
                         'mean_iterations': float(fold_scores.iterations.mean()),
+                        'mean_search_iterations': float(search_iterations.mean()),
+                        'budget_reached_folds': int(search_iterations.ge(ceiling).sum()),
                         'fit_seconds': float(fold_scores.seconds.sum()),
                         **{f'oof_{k}': v for k, v in probability_metrics(labels, p).items()}})
         for split, mask in [('pooled OOF', np.ones(len(labels), dtype=bool)),
@@ -402,11 +433,13 @@ def run(args):
                 'summary': summary, 'reused_bureau_run': cache,
                 'current_run_wall_seconds': round(perf_counter()-started, 3),
                 'limitations': ['All estimates use previously inspected development data; holdout is not scored.',
-                                ('Early stopping uses only an inner split of each training fold (HGB internal, '
-                                 'LightGBM stratified); the outer validation fold is never used for stopping.'
+                                ('Early stopping and its preprocessing use only a stratified inner-training split; '
+                                 'the chosen length is refitted on the full outer training fold. Outer validation is excluded.'
                                  if patience is not None else
                                  'Fixed configured models: HGB internal early stopping and LightGBM fixed tree budget differ.'),
-                                'Bootstrap intervals resample pooled OOF predictions; they do not cover refitting variance.',
+                                'Bootstrap intervals condition on fixed OOF scores and label prevalence; '
+                                'they omit refitting, overlapping-fold dependence, selection and population shift. '
+                                'They are not generalization confidence intervals or significance tests.',
                                 'Installment features describe observed past-payment tranches, not every unpaid obligation.',
                                 'Ambiguous schedules/duplicate events are conservatively excluded; snapshots need provenance review.',
                                 'Top-k policies are descriptive capacity comparisons, not tuned lending decisions.']}

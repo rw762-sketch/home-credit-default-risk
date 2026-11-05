@@ -77,11 +77,9 @@ def aggregate_previous(previous):
     if missing:
         raise ValueError(f'Missing previous-application columns: {sorted(missing)}')
     frame = previous.loc[:, list(INPUT_COLUMNS)].copy()
-    frame['SK_ID_CURR'] = _identifiers(frame.SK_ID_CURR, 'Previous SK_ID_CURR')
-    _identifiers(frame.SK_ID_PREV, 'SK_ID_PREV', unique=True)
     day = pd.to_numeric(frame.DAYS_DECISION, errors='coerce').astype(float)
     reasons = {'unknown_or_nonfinite_decision_day': ~np.isfinite(day),
-               'future_decision_day': day > 0}
+               'future_decision_day': np.isfinite(day) & day.gt(0)}
     excluded = pd.DataFrame(reasons, index=frame.index).any(axis=1)
     audit = {'scoped_rows': len(frame), 'excluded_rows': int(excluded.sum()),
              'exclusion_reasons_nonexclusive': {k: int(v.sum()) for k, v in reasons.items()},
@@ -89,6 +87,9 @@ def aggregate_previous(previous):
              'availability_limit': 'Supplied snapshot dates are screened; source provenance is not independently verified.',
              'unused_fields': 'Scheduled due/termination dates are not used.'}
     frame = frame.loc[~excluded].copy()
+    # Ineligible future/unknown observations cannot affect key validation either.
+    frame['SK_ID_CURR'] = _identifiers(frame.SK_ID_CURR, 'Previous SK_ID_CURR')
+    _identifiers(frame.SK_ID_PREV, 'SK_ID_PREV', unique=True)
     frame['DAYS_DECISION'] = day.loc[~excluded]
     audit['amounts_masked'] = {}
     for col in ['AMT_APPLICATION', 'AMT_CREDIT', 'AMT_ANNUITY', 'CNT_PAYMENT']:

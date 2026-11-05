@@ -28,6 +28,7 @@ ORDER = {
     'installments_audit.json': 39, 'operating_points.csv': 40,
     'paired_deltas.csv': 41,
     'checkpoint.npz': 42,
+    'previous_audit.json': 43, 'bootstrap_deltas.csv': 44,
 }
 
 

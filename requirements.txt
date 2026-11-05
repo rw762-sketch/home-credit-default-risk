@@ -2,7 +2,7 @@
 
 pandas>=2.2,<4
 numpy>=2,<3
-scikit-learn>=1.6,<2
+scikit-learn>=1.7,<2
 matplotlib>=3.9,<4
 joblib>=1.4,<2
 lightgbm>=4.5,<5

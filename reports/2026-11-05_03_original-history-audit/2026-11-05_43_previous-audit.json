@@ -1,0 +1,17 @@
+{
+  "table": "previous_application.csv",
+  "columns_read": [
+    "SK_ID_CURR",
+    "DAYS_DECISION"
+  ],
+  "source_rows": 1670214,
+  "source_day_zero": 0,
+  "development_day_zero": 0,
+  "development_future": 0,
+  "development_applicants": 246008,
+  "source_archive_sha256": "4e7a243b13f6e3d40f682a9a0cfd59c70910ca6c5a4289f71ca1f25efbd8e3de",
+  "development_assignments_sha256": "93045361a268833a0b9b7a618343f862da49f5f9929c4b3352efe5656504b13e",
+  "source_day_zero_expression": "DAYS_DECISION == 0 over every source row",
+  "development_future_expression": "DAYS_DECISION > 0 and SK_ID_CURR in exact development assignments",
+  "conclusion": "Strict <0 and <=0 decision-day rules give identical aggregates for these inputs; snapshot availability still needs independent review."
+}

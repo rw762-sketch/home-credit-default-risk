@@ -1,5 +1,17 @@
 # Report archive
 
+## Higher-budget staged development comparison (November 5)
+
+[Report](reports/2026-11-05_04_extended-history/2026-11-05_02_report.md) · [Aggregate tables](reports/2026-11-05_04_extended-history/data/)
+
+The November 5 comparison reaches **0.780062 mean fold AUC for HGB and 0.780078 for LightGBM** with the tested history families: effectively tied ranking results in this experiment. LightGBM took 288.5 fit seconds versus HGB's 1,082.3; HGB had slightly higher pooled OOF AP (0.270274 versus 0.269765). Previous-application history improved both algorithms, while the application-feature bundle showed no clear gain. These are previously inspected development results; the holdout remains excluded and independent final evaluation is unresolved.
+
+## Saved development score audit (November 5)
+
+[Report](reports/2026-11-05_03_original-history-audit/2026-11-05_02_report.md) · [Conditional paired intervals](reports/2026-11-05_03_original-history-audit/2026-11-05_44_bootstrap-deltas.csv) · [Calibration bins](reports/2026-11-05_03_original-history-audit/2026-11-05_26_calibration.csv) · [Manifest](reports/2026-11-05_03_original-history-audit/2026-11-05_04_manifest.json)
+
+Re-audits the October 15 saved predictions without training. The paired intervals condition on fixed OOF scores and preserve fold/class sizes; they are not independent validation or generalization confidence intervals. Only aggregate tables are tracked.
+
 ## History features and fixed-model comparison (development only)
 
 [Report](reports/2026-10-15_01_history-development/2026-10-15_02_report.md) · [Compact tables](reports/2026-10-15_01_history-development/data/) · [Manifest](reports/2026-10-15_01_history-development/2026-10-15_04_manifest.json)

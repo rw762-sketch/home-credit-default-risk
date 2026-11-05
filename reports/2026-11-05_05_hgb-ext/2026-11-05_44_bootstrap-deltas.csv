@@ -1,0 +1,3 @@
+metric,baseline,candidate,baseline_score,candidate_score,candidate_minus_baseline,conditional_percentile_2_5,conditional_percentile_97_5,repetitions,seed
+roc_auc,hgb_application_bureau_installments,hgb_application_bureau_installments_ext,0.776477127794521,0.77623486938951,-0.00024225840501101992,-0.001006487715064977,0.0005520256211917622,1000,42
+average_precision,hgb_application_bureau_installments,hgb_application_bureau_installments_ext,0.26479748200519276,0.26469321490824366,-0.00010426709694910663,-0.0017533691496976062,0.0015179450272260044,1000,42
